@@ -24,15 +24,15 @@ echo "Preparing installation directory..." | tee -a "$log_file"
 cd /
 rm -rf /opt/hublink-hypervisor
 mkdir -p /opt/hublink-hypervisor
-cd /opt/hublink-hypervisor || exit 1
 
 # Clone the repository
 echo "Downloading Hublink Hypervisor..." | tee -a "$log_file"
-git clone https://github.com/Neurotech-Hub/Hublink-Hypervisor.git . 2>> "$log_file" || {
+git clone https://github.com/Neurotech-Hub/Hublink-Hypervisor.git /opt/hublink-hypervisor 2>> "$log_file" || {
     echo "Git clone failed! See $log_file for details" | tee -a "$log_file"
     cat "$log_file"
     exit 1
 }
+cd /opt/hublink-hypervisor || exit 1
 echo "Repository cloned successfully" | tee -a "$log_file"
 
 # Set proper ownership
