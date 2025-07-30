@@ -42,6 +42,9 @@ class HublinkHypervisor {
             dashboardLinkContainer: document.getElementById('dashboard-link-container'),
             dashboardLink: document.getElementById('dashboard-link'),
 
+            // Gateway elements
+            gatewayTag: document.getElementById('gateway-tag'),
+
             // Logs elements
             logsContent: document.getElementById('logs-content'),
 
@@ -129,6 +132,9 @@ class HublinkHypervisor {
 
         // Update dashboard link
         this.updateDashboardLink(data.secret_url);
+
+        // Update gateway tag
+        this.updateGatewayTag(data.gateway_name);
 
         // Load logs if containers are running, clear if stopped
         if (data.container_state && data.container_state.state === 'running') {
@@ -322,6 +328,15 @@ class HublinkHypervisor {
             this.elements.dashboardLinkContainer.style.display = 'inline-flex';
         } else {
             this.elements.dashboardLinkContainer.style.display = 'none';
+        }
+    }
+
+    updateGatewayTag(gatewayName) {
+        if (gatewayName) {
+            this.elements.gatewayTag.textContent = gatewayName;
+            this.elements.gatewayTag.style.display = 'inline';
+        } else {
+            this.elements.gatewayTag.style.display = 'none';
         }
     }
 
@@ -521,8 +536,6 @@ class HublinkHypervisor {
         this.autoRefreshInterval = setInterval(() => {
             this.loadStatus(false); // Don't show loading for auto-refresh
         }, this.refreshInterval);
-
-        this.elements.autoRefreshStatus.textContent = 'Enabled';
     }
 
     stopAutoRefresh() {
@@ -530,8 +543,6 @@ class HublinkHypervisor {
             clearInterval(this.autoRefreshInterval);
             this.autoRefreshInterval = null;
         }
-
-        this.elements.autoRefreshStatus.textContent = 'Disabled';
     }
 
     switchTab(tabName) {

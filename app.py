@@ -335,14 +335,16 @@ def status():
         # Check Hublink API status if container is running
         hublink_status = None
         secret_url = None
+        gateway_name = None
         if container_state.get("state") == "running":
             try:
                 response = requests.get("http://localhost:6000/status", timeout=3)
                 if response.status_code in [200, 500]:  # Accept both 200 and 500 as valid responses
                     hublink_status = response.json()
                     logger.debug("Hublink API connected via port 6000")
-                    # Get secret_url if available
+                    # Get secret_url and gateway_name if available
                     secret_url = hublink_status.get("secret_url")
+                    gateway_name = hublink_status.get("gateway_name")
                     # Merge any Hublink errors
                     if hublink_status.get("status") == "error":
                         errors.update(hublink_status.get("errors", {}))
@@ -365,6 +367,7 @@ def status():
                 "container_state": container_state,
                 "hublink_status": hublink_status,
                 "secret_url": secret_url,
+                "gateway_name": gateway_name,
                 "timestamp": time.time()
             }
         else:
@@ -375,6 +378,7 @@ def status():
                 "container_state": container_state,
                 "hublink_status": hublink_status,
                 "secret_url": secret_url,
+                "gateway_name": gateway_name,
                 "timestamp": time.time()
             }
         

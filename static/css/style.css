@@ -44,8 +44,22 @@ body {
 
 .header-left {
     display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+}
+
+.header-subtitle {
+    display: flex;
     align-items: center;
-    gap: 2rem;
+    gap: 0.75rem;
+    margin-left: 0.25rem;
+}
+
+.subtitle-text {
+    font-size: 0.875rem;
+    color: #6c757d;
+    font-weight: 500;
 }
 
 .header-nav {
@@ -80,46 +94,7 @@ body {
     font-weight: 500;
 }
 
-.status-info {
-    color: #6c757d;
-    font-size: 0.75rem;
-    cursor: help;
-    opacity: 0.7;
-    transition: opacity 0.2s ease;
-    position: relative;
-}
 
-.status-info:hover {
-    opacity: 1;
-}
-
-.status-info:hover::after {
-    content: attr(data-tooltip);
-    position: absolute;
-    top: 125%;
-    right: 0;
-    background: #333;
-    color: white;
-    padding: 0.75rem;
-    border-radius: 6px;
-    font-size: 0.75rem;
-    font-weight: 400;
-    white-space: pre-line;
-    line-height: 1.4;
-    z-index: 1000;
-    min-width: 280px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.status-info:hover::before {
-    content: '';
-    position: absolute;
-    top: 120%;
-    right: 8px;
-    border: 5px solid transparent;
-    border-bottom-color: #333;
-    z-index: 1000;
-}
 
 .status-indicator-inline {
     display: flex;
@@ -127,6 +102,17 @@ body {
     gap: 0.5rem;
     font-size: 0.875rem;
     font-weight: 500;
+}
+
+.gateway-tag {
+    background: #e9ecef;
+    color: #495057;
+    padding: 0.25rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: 500;
+    border: 1px solid #dee2e6;
+    white-space: nowrap;
 }
 
 .status-dot {
@@ -255,6 +241,12 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+}
+
+.header-left-content {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
 }
 
 .table-header h2 {

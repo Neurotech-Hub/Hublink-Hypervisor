@@ -22,7 +22,10 @@
                     <!-- System Status Table -->
                     <div class="status-table">
                         <div class="table-header">
-                            <h2>System Status</h2>
+                            <div class="header-left-content">
+                                <h2>System Report</h2>
+                                <span class="gateway-tag" id="gateway-tag" style="display: none;"></span>
+                            </div>
                             <div class="table-actions">
                                 <button class="btn btn-primary" id="start-btn" disabled>Start</button>
                                 <button class="btn btn-secondary" id="stop-btn" disabled>Stop</button>
@@ -40,11 +43,6 @@
                                     <div class="status-indicator-inline" id="overall-status">
                                         <span class="status-dot"></span>
                                         <span class="status-text">Loading...</span>
-                                        <span class="status-info" data-tooltip="Status Guide:
-
-Healthy: Container online, healthy, both internet connections working
-Unhealthy: Container online but has issues (unhealthy, errors, or internet problems)  
-Waiting to start: Container not started">ⓘ</span>
                                     </div>
                                 </div>
                             </div>
