@@ -26,7 +26,7 @@ This will:
 - Configure logging
 - Start the service automatically
 
-The application will be available at `http://localhost:8080` and will start automatically on boot.
+The application will be available at `http://localhost:8081` and will start automatically on boot.
 
 ### Manual Installation
 
@@ -76,13 +76,13 @@ source venv/bin/activate
 python app.py
 ```
 
-The application will start on `http://localhost:8080`
+The application will start on `http://localhost:8081`
 
 ### Accessing the Dashboard
 
 Open your web browser and navigate to:
 ```
-http://localhost:8080
+http://localhost:8081
 ```
 
 ### Container Management
@@ -241,6 +241,22 @@ Application logs are stored at:
 /opt/hublink-hypervisor/logs/hublink-hypervisor.log
 ```
 
+### Updating the Application
+
+To update your installation with the latest files (overwrites local changes):
+
+```bash
+cd /opt/hublink-hypervisor
+sudo git fetch origin
+sudo git reset --hard origin/main
+sudo systemctl restart hublink-hypervisor.service
+```
+
+This will:
+- Fetch the latest changes from the repository
+- Reset to the latest main branch (overwriting any local changes)
+- Restart the service with the updated code
+
 ## Deployment
 
 ### Raspberry Pi 5
@@ -295,7 +311,7 @@ Application logs are stored at:
    - Verify firewall settings
 
 4. **Port Conflicts**:
-   - Default port is 8080
+   - Default port is 8081
    - Modify `app.py` to change port if needed
 
 ### Log Analysis
