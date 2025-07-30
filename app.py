@@ -56,15 +56,22 @@ class HublinkManager:
     
     def _get_compose_file(self):
         """Determine which docker-compose file to use based on OS"""
-        if os.path.exists(os.path.join(self.hublink_path, DOCKER_COMPOSE_MAC_FILE)):
-            logger.debug("Detected macOS environment, using docker-compose.macos.yml")
-            return DOCKER_COMPOSE_MAC_FILE
-        elif os.path.exists(os.path.join(self.hublink_path, DOCKER_COMPOSE_FILE)):
-            logger.debug("Using standard docker-compose.yml")
-            return DOCKER_COMPOSE_FILE
-        else:
-            logger.error(f"No docker-compose file found in {self.hublink_path}")
-            return DOCKER_COMPOSE_FILE
+        system = platform.system().lower()
+        
+        if system == "darwin":  # macOS
+            if os.path.exists(os.path.join(self.hublink_path, DOCKER_COMPOSE_MAC_FILE)):
+                logger.debug("Detected macOS environment, using docker-compose.macos.yml")
+                return DOCKER_COMPOSE_MAC_FILE
+            else:
+                logger.warning("macOS detected but docker-compose.macos.yml not found, falling back to docker-compose.yml")
+                return DOCKER_COMPOSE_FILE
+        else:  # Linux (production)
+            if os.path.exists(os.path.join(self.hublink_path, DOCKER_COMPOSE_FILE)):
+                logger.debug("Detected Linux environment, using docker-compose.yml")
+                return DOCKER_COMPOSE_FILE
+            else:
+                logger.error(f"No docker-compose.yml found in {self.hublink_path}")
+                return DOCKER_COMPOSE_FILE
     
     def _run_docker_command(self, command, timeout=30):
         """Execute docker-compose command with error handling"""
