@@ -39,13 +39,9 @@ echo "Repository cloned successfully" | tee -a "$log_file"
 echo "Setting file permissions..." | tee -a "$log_file"
 chown -R $INSTALL_USER:$INSTALL_USER /opt/hublink-hypervisor
 
-# Create virtual environment
-echo "Creating Python virtual environment..." | tee -a "$log_file"
-su - $INSTALL_USER -c "cd /opt/hublink-hypervisor && python3 -m venv venv"
-
-# Install Python dependencies
+# Install Python dependencies globally
 echo "Installing Python dependencies..." | tee -a "$log_file"
-su - $INSTALL_USER -c "cd /opt/hublink-hypervisor && source venv/bin/activate && pip install --upgrade pip && pip install -r requirements.txt"
+su - $INSTALL_USER -c "cd /opt/hublink-hypervisor && pip3 install --upgrade pip && pip3 install -r requirements.txt"
 
 # Create logs directory
 echo "Setting up logging..." | tee -a "$log_file"
@@ -64,8 +60,7 @@ Type=simple
 User=$INSTALL_USER
 Group=$INSTALL_USER
 WorkingDirectory=/opt/hublink-hypervisor
-Environment=PATH=/opt/hublink-hypervisor/venv/bin
-ExecStart=/opt/hublink-hypervisor/venv/bin/python app.py
+ExecStart=/usr/bin/python3 app.py
 Restart=always
 RestartSec=10
 StandardOutput=append:/opt/hublink-hypervisor/logs/hublink-hypervisor.log
@@ -96,6 +91,6 @@ else
 fi
 
 echo "Installation complete!" | tee -a "$log_file"
-echo "Hublink Hypervisor is now running at: http://localhost:8080" | tee -a "$log_file"
+echo "Hublink Hypervisor is now running at: http://localhost:8081" | tee -a "$log_file"
 echo "Logs are available at: /opt/hublink-hypervisor/logs/hublink-hypervisor.log" | tee -a "$log_file"
 echo "Service status: sudo systemctl status hublink-hypervisor.service" | tee -a "$log_file" 

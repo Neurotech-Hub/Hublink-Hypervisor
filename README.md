@@ -20,8 +20,7 @@ curl -sSL https://raw.githubusercontent.com/Neurotech-Hub/Hublink-Hypervisor/mai
 
 This will:
 - Install the application to `/opt/hublink-hypervisor`
-- Create a Python virtual environment
-- Install all dependencies
+- Install Python dependencies globally
 - Set up a systemd service for auto-start
 - Configure logging
 - Start the service automatically
@@ -40,27 +39,15 @@ The application will be available at `http://localhost:8081` and will start auto
    cd /path/to/Hublink-Hypervisor
    ```
 
-2. **Create and activate virtual environment**:
+2. **Install Python dependencies**:
    ```bash
-   # Create virtual environment
-   python3 -m venv venv
-   
-   # Activate virtual environment
-   # On macOS/Linux:
-   source venv/bin/activate
-   # On Windows:
-   # venv\Scripts\activate
-   ```
-
-3. **Install Python dependencies**:
-   ```bash
-   pip install -r requirements.txt
+   pip3 install -r requirements.txt
    
    # Optional: Upgrade pip to latest version
-   pip install --upgrade pip
+   pip3 install --upgrade pip
    ```
 
-4. **Ensure Hublink containers are set up**:
+3. **Ensure Hublink containers are set up**:
    - Verify that your Hublink Docker containers are configured in `/opt/hublink`
    - The app will automatically detect `docker-compose.yml` or `docker-compose.macos.yml`
 
@@ -69,11 +56,8 @@ The application will be available at `http://localhost:8081` and will start auto
 ### Starting the Application
 
 ```bash
-# Make sure your virtual environment is activated
-source venv/bin/activate
-
 # Start the application
-python app.py
+python3 app.py
 ```
 
 The application will start on `http://localhost:8081`
@@ -281,16 +265,13 @@ This will:
    pip3 install -r requirements.txt
    ```
 
-2. **Create and activate virtual environment**:
+2. **Install dependencies**:
    ```bash
-   python3 -m venv venv
-   source venv/bin/activate
    pip3 install -r requirements.txt
    ```
 
 3. **Run in development mode**:
    ```bash
-   source venv/bin/activate
    python3 app.py
    ```
 
