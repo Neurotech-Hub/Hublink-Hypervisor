@@ -330,6 +330,17 @@ body {
     color: #495057;
 }
 
+.dashboard-link-disabled {
+    color: #adb5bd;
+    text-decoration: none;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.dashboard-link-disabled:hover {
+    color: #adb5bd;
+}
+
 .table-row {
     display: grid;
     grid-template-columns: 1fr 1fr;

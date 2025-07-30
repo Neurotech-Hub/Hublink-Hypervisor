@@ -39,7 +39,6 @@ class HublinkHypervisor {
 
             // Footer elements
             lastUpdated: document.getElementById('last-updated'),
-            dashboardLinkContainer: document.getElementById('dashboard-link-container'),
             dashboardLink: document.getElementById('dashboard-link'),
 
             // Gateway elements
@@ -325,9 +324,10 @@ class HublinkHypervisor {
     updateDashboardLink(secretUrl) {
         if (secretUrl) {
             this.elements.dashboardLink.href = secretUrl;
-            this.elements.dashboardLinkContainer.style.display = 'inline-flex';
+            this.elements.dashboardLink.classList.remove('dashboard-link-disabled');
         } else {
-            this.elements.dashboardLinkContainer.style.display = 'none';
+            this.elements.dashboardLink.href = '#';
+            this.elements.dashboardLink.classList.add('dashboard-link-disabled');
         }
     }
 
