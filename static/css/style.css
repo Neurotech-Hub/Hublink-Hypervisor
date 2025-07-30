@@ -717,8 +717,9 @@ body {
 }
 
 .btn:disabled {
-    opacity: 0.5;
+    opacity: 0.3;
     cursor: not-allowed;
+    filter: grayscale(50%);
 }
 
 .btn-primary {
