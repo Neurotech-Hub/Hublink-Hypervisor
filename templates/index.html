@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>hublink.cloud™ Hypervisor</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        {% include 'partials/header.html' %}
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Dashboard Tab -->
+            <div class="tab-content active" id="dashboard-tab">
+                <div class="dashboard-content">
+                    <!-- System Status Table -->
+                    <div class="status-table">
+                        <div class="table-header">
+                            <h2>System Status</h2>
+                            <div class="table-actions">
+                                <button class="btn btn-primary" id="start-btn" disabled>Start</button>
+                                <button class="btn btn-secondary" id="stop-btn" disabled>Stop</button>
+                                <button class="btn btn-warning" id="restart-btn" disabled>Restart</button>
+                            </div>
+                        </div>
+                        <div class="table-content">
+                            <div class="table-row">
+                                <div class="table-cell">
+                                    <span class="cell-label">Container State</span>
+                                    <span class="cell-value" id="container-state">Loading...</span>
+                                </div>
+                                <div class="table-cell">
+                                    <span class="cell-label">System Status</span>
+                                    <div class="status-indicator-inline" id="overall-status">
+                                        <span class="status-dot"></span>
+                                        <span class="status-text">Loading...</span>
+                                        <span class="status-info" data-tooltip="Status Guide:
+
+Healthy: Container online, healthy, both internet connections working
+Unhealthy: Container online but has issues (unhealthy, errors, or internet problems)  
+Waiting to start: Container not started">ⓘ</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="table-row">
+                                <div class="table-cell" style="grid-column: 1 / -1;">
+                                    <span class="cell-label">Status Details</span>
+                                    <span class="cell-value" id="container-message">-</span>
+                                </div>
+                            </div>
+                            <div class="table-row" id="container-details-row" style="display: none;">
+                                <div class="table-cell" style="grid-column: 1 / -1;">
+                                    <div class="container-details-header" id="container-details-header">
+                                        <!-- Container count will be populated here -->
+                                    </div>
+                                    <div class="container-details-inline" id="container-list">
+                                        <!-- Container details will be populated here -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="table-footer">
+                            <span class="footer-item">
+                                <span class="footer-label">Hypervisor Internet:</span>
+                                <span class="footer-value" id="app-internet">Loading...</span>
+                            </span>
+                            <span class="footer-item">
+                                <span class="footer-label">Container Internet:</span>
+                                <span class="footer-value" id="hublink-internet">Loading...</span>
+                            </span>
+                            <span class="footer-item" id="dashboard-link-container" style="display: none;">
+                                <a href="#" id="dashboard-link" target="_blank" class="dashboard-link">Dashboard ↗</a>
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Container Logs Section -->
+                    <div class="logs-section">
+                        <div class="logs-header">
+                            <h3>Container Logs</h3>
+                        </div>
+                        <div class="logs-terminal" id="logs-terminal">
+                            <div class="logs-content" id="logs-content">
+                                <div class="log-line">Loading logs...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SoC Tab -->
+            <div class="tab-content" id="soc-tab">
+                <div class="soc-content">
+                    <div class="soc-placeholder">
+                        <div class="soc-placeholder-content">
+                            <span class="soc-placeholder-icon">🔧</span>
+                            <h2>System on Chip (SoC) Management</h2>
+                            <p>This section will contain SoC-specific monitoring and control features.</p>
+                            <p>Coming soon...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        {% include 'partials/footer.html' %}
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loading-overlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Processing...</div>
+    </div>
+
+    <!-- Error Modal -->
+    <div class="modal-overlay" id="error-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Error Details</h3>
+                <button class="modal-close" id="modal-close">&times;</button>
+            </div>
+            <div class="modal-content" id="modal-content">
+                <!-- Error details will be populated here -->
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html> 
