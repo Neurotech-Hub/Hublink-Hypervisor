@@ -9,6 +9,7 @@ import json
 import subprocess
 import requests
 import time
+import platform
 from datetime import datetime
 from flask import Flask, jsonify, request, render_template
 from flask_cors import CORS
@@ -32,6 +33,17 @@ CORS(app)  # Enable CORS for development
 HUBLINK_PATH = '/opt/hublink'
 DOCKER_COMPOSE_FILE = 'docker-compose.yml'
 DOCKER_COMPOSE_MAC_FILE = 'docker-compose.macos.yml'
+
+def get_hublink_port():
+    """Determine the correct port for Hublink container based on OS"""
+    system = platform.system().lower()
+    if system == "darwin":  # macOS
+        return 6000
+    else:  # Linux (production)
+        return 5000
+
+HUBLINK_PORT = get_hublink_port()
+logger.info(f"Detected OS: {platform.system()}, using Hublink port: {HUBLINK_PORT}")
 
 class HublinkManager:
     """Manages Hublink Docker container operations and status monitoring"""
@@ -264,11 +276,11 @@ class InternetChecker:
         try:
             logger.debug("Checking Hublink container internet connectivity")
             
-            # Check container on port 6000
+            # Check container on the appropriate port
             try:
-                response = requests.get("http://localhost:6000/health", timeout=3)
+                response = requests.get(f"http://localhost:{HUBLINK_PORT}/health", timeout=3)
                 if response.status_code == 200:
-                    logger.debug("Hublink container has internet connectivity via port 6000")
+                    logger.debug(f"Hublink container has internet connectivity via port {HUBLINK_PORT}")
                     return True
                 else:
                     logger.warning(f"Hublink container health check failed with status: {response.status_code}")
@@ -338,10 +350,10 @@ def status():
         gateway_name = None
         if container_state.get("state") == "running":
             try:
-                response = requests.get("http://localhost:6000/status", timeout=3)
+                response = requests.get(f"http://localhost:{HUBLINK_PORT}/status", timeout=3)
                 if response.status_code in [200, 500]:  # Accept both 200 and 500 as valid responses
                     hublink_status = response.json()
-                    logger.debug("Hublink API connected via port 6000")
+                    logger.debug(f"Hublink API connected via port {HUBLINK_PORT}")
                     # Get secret_url and gateway_name if available
                     secret_url = hublink_status.get("secret_url")
                     gateway_name = hublink_status.get("gateway_name")
