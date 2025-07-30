@@ -10,10 +10,30 @@ A clean, minimal Flask web application for monitoring and controlling Hublink Do
 
 ## Installation
 
+### Quick Installation (Recommended)
+
+For installation on Raspberry Pi 5, download and run the setup script with a single command:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/Neurotech-Hub/Hublink-Hypervisor/main/setup.sh | sudo bash
+```
+
+This will:
+- Install the application to `/opt/hublink-hypervisor`
+- Create a Python virtual environment
+- Install all dependencies
+- Set up a systemd service for auto-start
+- Configure logging
+- Start the service automatically
+
+The application will be available at `http://localhost:8080` and will start automatically on boot.
+
+### Manual Installation
+
 1. **Clone or download the application**:
    ```bash
    # If you have this as a repository
-   git clone <repository-url>
+   git clone https://github.com/Neurotech-Hub/Hublink-Hypervisor.git
    cd Hublink-Hypervisor
    
    # Or if you have the files directly
@@ -40,7 +60,7 @@ A clean, minimal Flask web application for monitoring and controlling Hublink Do
    pip install --upgrade pip
    ```
 
-3. **Ensure Hublink containers are set up**:
+4. **Ensure Hublink containers are set up**:
    - Verify that your Hublink Docker containers are configured in `/opt/hublink`
    - The app will automatically detect `docker-compose.yml` or `docker-compose.macos.yml`
 
@@ -182,19 +202,60 @@ The application provides detailed error information:
 - Hublink API communication problems
 - System-level errors
 
+## Service Management
+
+### Service Commands
+
+If installed via the setup script, the Hublink Hypervisor runs as a systemd service:
+
+```bash
+# Check service status
+sudo systemctl status hublink-hypervisor.service
+
+# Start the service
+sudo systemctl start hublink-hypervisor.service
+
+# Stop the service
+sudo systemctl stop hublink-hypervisor.service
+
+# Restart the service
+sudo systemctl restart hublink-hypervisor.service
+
+# Enable auto-start on boot
+sudo systemctl enable hublink-hypervisor.service
+
+# Disable auto-start on boot
+sudo systemctl disable hublink-hypervisor.service
+
+# View service logs
+sudo journalctl -u hublink-hypervisor.service -f
+
+# View recent logs
+sudo journalctl -u hublink-hypervisor.service --since "1 hour ago"
+```
+
+### Application Logs
+
+Application logs are stored at:
+```bash
+/opt/hublink-hypervisor/logs/hublink-hypervisor.log
+```
+
 ## Deployment
 
 ### Raspberry Pi 5
 
-1. **Install dependencies**:
+1. **Quick Installation** (Recommended):
+   ```bash
+   curl -sSL https://raw.githubusercontent.com/Neurotech-Hub/Hublink-Hypervisor/main/setup.sh | sudo bash
+   ```
+
+2. **Manual Installation**:
    ```bash
    sudo apt update
    sudo apt install python3 python3-pip
    pip3 install -r requirements.txt
    ```
-
-2. **Run as service** (optional):
-   Create a systemd service file for automatic startup.
 
 ### Development Machine (macOS)
 
