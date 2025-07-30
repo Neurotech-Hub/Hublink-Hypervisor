@@ -1034,24 +1034,34 @@ body {
 @media (max-width: 768px) {
     .header-content {
         padding: 0 1rem;
-        flex-direction: column;
+        flex-direction: row;
         gap: 1rem;
-        align-items: flex-start;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: nowrap;
     }
 
     .header-left {
-        flex-direction: column;
+        flex-direction: row;
         gap: 1rem;
-        align-items: flex-start;
+        align-items: center;
+        flex-shrink: 0;
     }
 
     .app-title {
         font-size: 1.25rem;
+        white-space: nowrap;
+    }
+
+    .header-nav {
+        flex-shrink: 0;
+        white-space: nowrap;
     }
 
     .header-nav .nav-tab {
         padding: 0.5rem 0.75rem;
         font-size: 0.8rem;
+        white-space: nowrap;
     }
 
     .status-grid {
