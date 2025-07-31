@@ -1,101 +1,107 @@
 #!/bin/bash
 
-set -e  # Exit on error
-log_file="install.log"
+# Hublink Hypervisor Docker Installation Script
+# This script installs the Hublink Hypervisor as a Docker container
+
+set -e
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Configuration
+INSTALL_PATH="/opt/hublink-hypervisor"
+IMAGE_NAME="neurotechhub/hublink-hypervisor:latest"
+APP_PORT="8081"
+
+echo -e "${GREEN}Hublink Hypervisor Docker Installation${NC}"
+echo ""
 
 # Check if running as root
-if [ "$EUID" -ne 0 ]; then 
-    echo "Please run as root (use sudo)"
+if [ "$EUID" -ne 0 ]; then
+    echo -e "${RED}Error: This script must be run as root (use sudo)${NC}"
     exit 1
 fi
 
-echo "Starting Hublink Hypervisor installation..." | tee -a "$log_file"
-
-# Get the installing user
-INSTALL_USER=$(logname)
-if [ -z "$INSTALL_USER" ]; then
-    INSTALL_USER=$SUDO_USER
+# Check if Docker is installed and running
+if ! command -v docker &> /dev/null; then
+    echo -e "${RED}Error: Docker is not installed${NC}"
+    exit 1
 fi
 
-echo "Installing for user: $INSTALL_USER" | tee -a "$log_file"
-
-# Remove existing directory completely and recreate fresh
-echo "Preparing installation directory..." | tee -a "$log_file"
-cd /
-rm -rf /opt/hublink-hypervisor
-mkdir -p /opt/hublink-hypervisor
-
-# Clone the repository
-echo "Downloading Hublink Hypervisor..." | tee -a "$log_file"
-git clone https://github.com/Neurotech-Hub/Hublink-Hypervisor.git /opt/hublink-hypervisor 2>> "$log_file" || {
-    echo "Git clone failed! See $log_file for details" | tee -a "$log_file"
-    cat "$log_file"
+if ! docker info &> /dev/null; then
+    echo -e "${RED}Error: Docker is not running or user is not in docker group${NC}"
     exit 1
-}
-cd /opt/hublink-hypervisor || exit 1
-echo "Repository cloned successfully" | tee -a "$log_file"
+fi
 
-# Set proper ownership
-echo "Setting file permissions..." | tee -a "$log_file"
-chown -R $INSTALL_USER:$INSTALL_USER /opt/hublink-hypervisor
+# Check if docker-compose is available
+if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
+    echo -e "${RED}Error: docker-compose is not installed${NC}"
+    exit 1
+fi
 
-# Create virtual environment
-echo "Creating Python virtual environment..." | tee -a "$log_file"
-su - $INSTALL_USER -c "cd /opt/hublink-hypervisor && python3 -m venv venv"
+echo -e "${GREEN}✓ Docker and docker-compose are available${NC}"
 
-# Install Python dependencies
-echo "Installing Python dependencies..." | tee -a "$log_file"
-su - $INSTALL_USER -c "cd /opt/hublink-hypervisor && source venv/bin/activate && pip install --upgrade pip && pip install -r requirements.txt"
+# Remove existing installation if it exists
+if [ -d "$INSTALL_PATH" ]; then
+    echo -e "${YELLOW}Removing existing installation...${NC}"
+    rm -rf "$INSTALL_PATH"
+fi
 
-# Create logs directory
-echo "Setting up logging..." | tee -a "$log_file"
-mkdir -p /opt/hublink-hypervisor/logs
-chown $INSTALL_USER:$INSTALL_USER /opt/hublink-hypervisor/logs
+# Create installation directory
+echo -e "${YELLOW}Creating installation directory...${NC}"
+mkdir -p "$INSTALL_PATH"
+cd "$INSTALL_PATH"
 
-# Create systemd service file
-echo "Creating systemd service..." | tee -a "$log_file"
-cat > /etc/systemd/system/hublink-hypervisor.service <<EOL
-[Unit]
-Description=Hublink Hypervisor Flask Application
-After=network.target
+# Download docker-compose file
+echo -e "${YELLOW}Downloading docker-compose configuration...${NC}"
+curl -sSL https://raw.githubusercontent.com/Neurotech-Hub/Hublink-Hypervisor/main/docker-compose.hypervisor.yml -o docker-compose.hypervisor.yml
 
-[Service]
-Type=simple
-User=$INSTALL_USER
-Group=$INSTALL_USER
-WorkingDirectory=/opt/hublink-hypervisor
-Environment=PATH=/opt/hublink-hypervisor/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-ExecStart=/opt/hublink-hypervisor/venv/bin/python app.py
-Restart=always
-RestartSec=10
-StandardOutput=append:/opt/hublink-hypervisor/logs/hublink-hypervisor.log
-StandardError=append:/opt/hublink-hypervisor/logs/hublink-hypervisor.log
+# Pull the Docker image
+echo -e "${YELLOW}Pulling Hublink Hypervisor Docker image...${NC}"
+docker pull "$IMAGE_NAME"
 
-[Install]
-WantedBy=multi-user.target
-EOL
-
-# Set proper permissions for service file
-chmod 644 /etc/systemd/system/hublink-hypervisor.service
-
-# Reload systemd and enable service
-echo "Enabling and starting service..." | tee -a "$log_file"
-systemctl daemon-reload
-systemctl enable hublink-hypervisor.service
-systemctl start hublink-hypervisor.service
-
-# Wait a moment for service to start
-sleep 3
-
-# Check if service is running
-if systemctl is-active --quiet hublink-hypervisor.service; then
-    echo "Hublink Hypervisor service is running successfully!" | tee -a "$log_file"
+# Start the container
+echo -e "${YELLOW}Starting Hublink Hypervisor container...${NC}"
+if command -v docker-compose &> /dev/null; then
+    docker-compose -f docker-compose.hypervisor.yml up -d
 else
-    echo "Warning: Service may not have started properly. Check logs:" | tee -a "$log_file"
-    echo "sudo journalctl -u hublink-hypervisor.service -f" | tee -a "$log_file"
+    docker compose -f docker-compose.hypervisor.yml up -d
 fi
 
-echo "Installation complete!" | tee -a "$log_file"
-echo "Hublink Hypervisor is now running at: http://localhost:8081" | tee -a "$log_file"
-echo "Logs are available at: /opt/hublink-hypervisor/logs/hublink-hypervisor.log" | tee -a "$log_file"
-echo "Service status: sudo systemctl status hublink-hypervisor.service" | tee -a "$log_file" 
+# Wait a moment for the container to start
+sleep 5
+
+# Check if container is running
+if docker ps --format "table {{.Names}}" | grep -q "hublink-hypervisor"; then
+    echo -e "${GREEN}✓ Hublink Hypervisor container is running${NC}"
+else
+    echo -e "${RED}✗ Failed to start Hublink Hypervisor container${NC}"
+    echo -e "${YELLOW}Check logs with: docker logs hublink-hypervisor${NC}"
+    exit 1
+fi
+
+echo ""
+echo -e "${GREEN}Installation completed successfully!${NC}"
+echo ""
+echo -e "${YELLOW}Container Information:${NC}"
+echo -e "  Container Name: hublink-hypervisor"
+echo -e "  Web Interface: http://localhost:$APP_PORT"
+echo -e "  Image: $IMAGE_NAME"
+echo ""
+echo -e "${YELLOW}Container Management:${NC}"
+echo -e "  Check Status: docker ps | grep hublink-hypervisor"
+echo -e "  View Logs: docker logs -f hublink-hypervisor"
+echo -e "  Stop Container: docker-compose -f $INSTALL_PATH/docker-compose.hypervisor.yml down"
+echo -e "  Start Container: docker-compose -f $INSTALL_PATH/docker-compose.hypervisor.yml up -d"
+echo -e "  Restart Container: docker-compose -f $INSTALL_PATH/docker-compose.hypervisor.yml restart"
+echo ""
+echo -e "${YELLOW}Auto-Updates:${NC}"
+echo -e "  The container is configured for automatic updates via Watchtower"
+echo -e "  Watchtower will automatically pull and restart the container when updates are available"
+echo ""
+echo -e "${YELLOW}Manual Updates:${NC}"
+echo -e "  Pull Latest Image: docker pull $IMAGE_NAME"
+echo -e "  Restart Container: docker-compose -f $INSTALL_PATH/docker-compose.hypervisor.yml up -d" 

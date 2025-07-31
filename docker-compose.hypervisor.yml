@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  hublink-hypervisor:
+    image: neurotechhub/hublink-hypervisor:latest
+    container_name: hublink-hypervisor
+    ports:
+      - "8081:8081"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /opt/hublink:/opt/hublink:ro
+    environment:
+      - HUBLINK_PATH=/opt/hublink
+    restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    networks:
+      - hypervisor-network
+
+networks:
+  hypervisor-network:
+    driver: bridge 

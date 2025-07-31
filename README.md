@@ -2,9 +2,18 @@
 
 A clean, minimal Flask web application for monitoring and controlling Hublink Docker containers on Raspberry Pi 5 or development machines.
 
+## Features
+
+- Real-time status monitoring of Hublink containers
+- Start/Stop/Restart container controls
+- Internet connectivity monitoring
+- Container logs viewing
+- Clean, minimal UI with responsive design
+- Automatic updates via Watchtower
+- Docker-based deployment for easy management
+
 ## Prerequisites
 
-- Python 3.7+
 - Docker and Docker Compose
 - Hublink containers running from `/opt/hublink` directory
 
@@ -19,16 +28,44 @@ curl -sSL https://raw.githubusercontent.com/Neurotech-Hub/Hublink-Hypervisor/mai
 ```
 
 This will:
-- Install the application to `/opt/hublink-hypervisor`
-- Create a Python virtual environment
-- Install all dependencies
-- Set up a systemd service for auto-start
-- Configure logging
-- Start the service automatically
+- Install the application as a Docker container
+- Set up automatic updates via Watchtower
+- Start the application on port 8081
 
 The application will be available at `http://localhost:8081` and will start automatically on boot.
 
-### Manual Installation
+### Manual Docker Installation
+
+1. **Pull the Docker image**:
+   ```bash
+   docker pull neurotechhub/hublink-hypervisor:latest
+   ```
+
+2. **Create a docker-compose file**:
+   ```yaml
+   version: '3.8'
+   services:
+     hublink-hypervisor:
+       image: neurotechhub/hublink-hypervisor:latest
+       container_name: hublink-hypervisor
+       ports:
+         - "8081:8081"
+       volumes:
+         - /var/run/docker.sock:/var/run/docker.sock:ro
+         - /opt/hublink:/opt/hublink:ro
+       environment:
+         - HUBLINK_PATH=/opt/hublink
+       restart: unless-stopped
+       labels:
+         - "com.centurylinklabs.watchtower.enable=true"
+   ```
+
+3. **Start the container**:
+   ```bash
+   docker-compose up -d
+   ```
+
+### Local Development Installation
 
 1. **Clone or download the application**:
    ```bash
@@ -68,6 +105,19 @@ The application will be available at `http://localhost:8081` and will start auto
 
 ### Starting the Application
 
+#### Docker Deployment
+```bash
+# Start the container
+docker-compose -f docker-compose.hypervisor.yml up -d
+
+# Check status
+docker ps | grep hublink-hypervisor
+
+# View logs
+docker logs -f hublink-hypervisor
+```
+
+#### Local Development
 ```bash
 # Make sure your virtual environment is activated
 source venv/bin/activate
@@ -100,7 +150,7 @@ The dashboard displays:
 1. **Container Status**: Current state and details of Hublink containers
 2. **Internet Connectivity**: Status of both hypervisor and Hublink container internet access
 3. **System Health**: Overall system status with detailed error reporting
-4. **Quick Actions**: Refresh status, view logs, and configuration options
+4. **Container Logs**: Real-time logs from the Hublink containers
 
 ## API Endpoints
 
@@ -141,6 +191,12 @@ GET /api/internet/check
 ```
 Check internet connectivity for both hypervisor and Hublink container.
 
+### Container Logs
+```bash
+GET /api/logs
+```
+Get recent container logs.
+
 ## Configuration
 
 ### Environment Variables
@@ -163,16 +219,19 @@ The application logs to both console and file:
 ### Project Structure
 ```
 Hublink-Hypervisor/
-├── app.py                 # Main Flask application
-├── requirements.txt       # Python dependencies
-├── README.md             # This file
+├── app.py                           # Main Flask application
+├── requirements.txt                 # Python dependencies
+├── setup.sh                        # Docker installation script
+├── start.sh                        # Development startup script
+├── Dockerfile                      # Docker container definition
+├── docker-compose.hypervisor.yml   # Docker Compose configuration
 ├── templates/
-│   └── index.html        # Main dashboard template
+│   └── index.html                  # Main dashboard template
 └── static/
     ├── css/
-    │   └── style.css     # Custom CSS styles
+    │   └── style.css               # Custom CSS styles
     └── js/
-        └── app.js        # Frontend JavaScript
+        └── app.js                  # Frontend JavaScript
 ```
 
 ### Key Components
@@ -186,7 +245,17 @@ Hublink-Hypervisor/
 
 The application includes comprehensive logging:
 
-```python
+#### Docker Deployment
+```bash
+# Check logs in real-time
+docker logs -f hublink-hypervisor
+
+# View recent logs
+docker logs hublink-hypervisor
+```
+
+#### Local Development
+```bash
 # Check logs in real-time
 tail -f hublink_hypervisor.log
 
@@ -202,60 +271,51 @@ The application provides detailed error information:
 - Hublink API communication problems
 - System-level errors
 
-## Service Management
+## Container Management
 
-### Service Commands
+### Container Commands
 
-If installed via the setup script, the Hublink Hypervisor runs as a systemd service:
+If installed via Docker, manage the Hublink Hypervisor container with:
 
 ```bash
-# Check service status
-sudo systemctl status hublink-hypervisor.service
+# Check container status
+docker ps | grep hublink-hypervisor
 
-# Start the service
-sudo systemctl start hublink-hypervisor.service
+# Start the container
+docker-compose -f /opt/hublink-hypervisor/docker-compose.hypervisor.yml up -d
 
-# Stop the service
-sudo systemctl stop hublink-hypervisor.service
+# Stop the container
+docker-compose -f /opt/hublink-hypervisor/docker-compose.hypervisor.yml down
 
-# Restart the service
-sudo systemctl restart hublink-hypervisor.service
+# Restart the container
+docker-compose -f /opt/hublink-hypervisor/docker-compose.hypervisor.yml restart
 
-# Enable auto-start on boot
-sudo systemctl enable hublink-hypervisor.service
-
-# Disable auto-start on boot
-sudo systemctl disable hublink-hypervisor.service
-
-# View service logs
-sudo journalctl -u hublink-hypervisor.service -f
+# View container logs
+docker logs -f hublink-hypervisor
 
 # View recent logs
-sudo journalctl -u hublink-hypervisor.service --since "1 hour ago"
+docker logs --since "1h" hublink-hypervisor
 ```
 
-### Application Logs
+### Auto-Updates
 
-Application logs are stored at:
+The container is configured for automatic updates via Watchtower. When a new version is pushed to Docker Hub, Watchtower will automatically:
+
+1. Pull the latest image
+2. Stop the current container
+3. Start a new container with the updated image
+
+### Manual Updates
+
+To manually update the container:
+
 ```bash
-/opt/hublink-hypervisor/logs/hublink-hypervisor.log
+# Pull latest image
+docker pull neurotechhub/hublink-hypervisor:latest
+
+# Restart container
+docker-compose -f /opt/hublink-hypervisor/docker-compose.hypervisor.yml up -d
 ```
-
-### Updating the Application
-
-To update your installation with the latest files (overwrites local changes):
-
-```bash
-cd /opt/hublink-hypervisor
-sudo git fetch origin
-sudo git reset --hard origin/main
-sudo systemctl restart hublink-hypervisor.service
-```
-
-This will:
-- Fetch the latest changes from the repository
-- Reset to the latest main branch (overwriting any local changes)
-- Restart the service with the updated code
 
 ## Deployment
 
@@ -266,31 +326,26 @@ This will:
    curl -sSL https://raw.githubusercontent.com/Neurotech-Hub/Hublink-Hypervisor/main/setup.sh | sudo bash
    ```
 
-2. **Manual Installation**:
+2. **Manual Docker Installation**:
    ```bash
-   sudo apt update
-   sudo apt install python3 python3-pip
-   pip3 install -r requirements.txt
+   docker pull neurotechhub/hublink-hypervisor:latest
+   # Create docker-compose.hypervisor.yml and run docker-compose up -d
    ```
 
 ### Development Machine (macOS)
 
-1. **Install dependencies**:
+1. **Docker Deployment**:
    ```bash
-   brew install python3
-   pip3 install -r requirements.txt
+   docker pull neurotechhub/hublink-hypervisor:latest
+   # Create docker-compose.hypervisor.yml and run docker-compose up -d
    ```
 
-2. **Create and activate virtual environment**:
+2. **Local Development**:
    ```bash
+   brew install python3
    python3 -m venv venv
    source venv/bin/activate
    pip3 install -r requirements.txt
-   ```
-
-3. **Run in development mode**:
-   ```bash
-   source venv/bin/activate
    python3 app.py
    ```
 
@@ -298,26 +353,38 @@ This will:
 
 ### Common Issues
 
-1. **Permission Denied**:
+1. **Docker Socket Access**:
+   - Ensure the container has access to `/var/run/docker.sock`
+   - Check Docker socket permissions
+
+2. **Permission Denied**:
    - Ensure the application has access to `/opt/hublink`
    - Check Docker permissions
 
-2. **Container Not Found**:
+3. **Container Not Found**:
    - Verify Hublink containers are in `/opt/hublink`
    - Check docker-compose file exists
 
-3. **Internet Connectivity Issues**:
+4. **Internet Connectivity Issues**:
    - Check network configuration
    - Verify firewall settings
 
-4. **Port Conflicts**:
+5. **Port Conflicts**:
    - Default port is 8081
-   - Modify `app.py` to change port if needed
+   - Modify docker-compose file to change port if needed
 
 ### Log Analysis
 
-Check the log file for detailed error information:
+#### Docker Deployment
 ```bash
+# Check for errors
+docker logs hublink-hypervisor | grep ERROR
+docker logs hublink-hypervisor | grep WARNING
+```
+
+#### Local Development
+```bash
+# Check for errors
 grep ERROR hublink_hypervisor.log
 grep WARNING hublink_hypervisor.log
 ```
