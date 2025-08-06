@@ -2,16 +2,6 @@
 
 A clean, minimal Flask web application for monitoring and controlling Hublink Docker containers on Raspberry Pi 5 or development machines.
 
-## Features
-
-- Real-time status monitoring of Hublink containers
-- Start/Stop/Restart container controls
-- Internet connectivity monitoring
-- Container logs viewing
-- Clean, minimal UI with responsive design
-- Automatic updates via Watchtower
-- Docker-based deployment for easy management
-
 ## Prerequisites
 
 - Docker and Docker Compose
@@ -33,6 +23,34 @@ This will:
 - Start the application on port 8081
 
 The application will be available at `http://localhost:8081` and will start automatically on boot.
+
+## Docker Deployment for Raspberry Pi
+
+1. **Login to Docker Hub**:
+   ```bash
+   docker login
+   ```
+
+2. **Build and Push Image**:
+   ```bash
+   # For production (latest tag)
+   docker buildx build --platform linux/arm64 \
+     -t neurotechhub/hublink-hypervisor:latest \
+     --push .
+
+   # For development/testing (dev tag)
+   docker buildx build --platform linux/arm64 \
+     -t neurotechhub/hublink-hypervisor:dev \
+     --push .
+   ```
+
+3. **Multi-platform Build** (optional):
+   ```bash
+   # Build for both ARM64 (Raspberry Pi) and AMD64 (development)
+   docker buildx build --platform linux/arm64,linux/amd64 \
+     -t neurotechhub/hublink-hypervisor:latest \
+     --push .
+   ```
 
 ### Manual Docker Installation
 

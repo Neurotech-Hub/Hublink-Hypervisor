@@ -14,6 +14,7 @@ from datetime import datetime
 from flask import Flask, jsonify, request, render_template
 from flask_cors import CORS
 import logging
+import docker
 
 # Configure logging
 logging.basicConfig(
@@ -35,15 +36,49 @@ DOCKER_COMPOSE_FILE = 'docker-compose.yml'
 DOCKER_COMPOSE_MAC_FILE = 'docker-compose.macos.yml'
 
 def get_hublink_port():
-    """Determine the correct port for Hublink container based on OS"""
-    system = platform.system().lower()
-    if system == "darwin":  # macOS
-        return 6000
-    else:  # Linux (production)
-        return 5000
+    """Dynamically determine the correct port for Hublink container"""
+    # Try port 6000 first (common for development), then fallback to 5000
+    # Retry a few times in case the container is still starting up
+    for attempt in range(3):
+        for port in [6000, 5000]:
+            # Try multiple host addresses
+            for host in ['localhost', '127.0.0.1', 'host.docker.internal']:
+                try:
+                    response = requests.get(f"http://{host}:{port}/status", timeout=3)
+                    if response.status_code in [200, 500]:  # Accept both 200 and 500 as valid responses
+                        logger.info(f"Hublink container found on {host}:{port}")
+                        return port
+                except requests.exceptions.RequestException:
+                    continue
+        
+        if attempt < 2:  # Don't sleep on the last attempt
+            logger.debug(f"Port detection attempt {attempt + 1} failed, retrying in 2 seconds...")
+            time.sleep(2)
+    
+    # Default to 5000 if neither port responds
+    logger.warning("Could not detect Hublink container port, defaulting to 5000")
+    return 5000
 
 HUBLINK_PORT = get_hublink_port()
-logger.info(f"Detected OS: {platform.system()}, using Hublink port: {HUBLINK_PORT}")
+logger.info(f"Using Hublink port: {HUBLINK_PORT}")
+
+def get_hublink_host():
+    """Get the correct host for Hublink container communication"""
+    # Try multiple host addresses to find the one that works
+    for host in ['localhost', '127.0.0.1', 'host.docker.internal']:
+        try:
+            response = requests.get(f"http://{host}:{HUBLINK_PORT}/status", timeout=2)
+            if response.status_code in [200, 500]:
+                logger.debug(f"Using host {host} for Hublink communication")
+                return host
+        except requests.exceptions.RequestException:
+            continue
+    
+    # Default to localhost if none work
+    logger.warning("Could not detect working host, defaulting to localhost")
+    return 'localhost'
+
+HUBLINK_HOST = get_hublink_host()
 
 class HublinkManager:
     """Manages Hublink Docker container operations and status monitoring"""
@@ -51,6 +86,12 @@ class HublinkManager:
     def __init__(self):
         self.hublink_path = HUBLINK_PATH
         self.compose_file = self._get_compose_file()
+        try:
+            self.docker_client = docker.from_env()
+            logger.info("Successfully initialized Docker client")
+        except Exception as e:
+            logger.warning(f"Failed to initialize Docker client: {e}")
+            self.docker_client = None
         logger.info(f"Initialized HublinkManager with path: {self.hublink_path}")
         logger.info(f"Using compose file: {self.compose_file}")
     
@@ -101,7 +142,51 @@ class HublinkManager:
         try:
             logger.debug("Fetching container status")
             
-            # Get all containers with simple format
+            # Try using Docker Python SDK first
+            if self.docker_client:
+                try:
+                    containers = []
+                    for container in self.docker_client.containers.list(all=True):
+                        # Get container status
+                        status = container.status
+                        
+                        # Get ports
+                        ports = []
+                        if container.attrs.get('NetworkSettings', {}).get('Ports'):
+                            for port_mapping in container.attrs['NetworkSettings']['Ports'].values():
+                                if port_mapping:
+                                    ports.extend([p['HostPort'] for p in port_mapping])
+                        ports_str = ', '.join(ports) if ports else ''
+                        
+                        containers.append({
+                            "name": container.name,
+                            "status": status,
+                            "ports": ports_str,
+                            "image": container.image.tags[0] if container.image.tags else container.image.id
+                        })
+                    
+                    # Check for active Hublink gateway containers (exclude hypervisor and watchtower)
+                    hublink_containers = [
+                        c for c in containers 
+                        if 'hublink-gateway' in c['name'].lower() 
+                        and 'hypervisor' not in c['name'].lower()
+                        and 'watchtower' not in c['name'].lower()
+                        and c['status'] != 'exited'
+                    ]
+                    
+                    logger.debug(f"Found {len(hublink_containers)} Hublink containers using Docker SDK")
+                    logger.debug(f"All containers: {[c['name'] for c in containers]}")
+                    logger.debug(f"Hublink containers: {[c['name'] for c in hublink_containers]}")
+                    return {
+                        "containers": containers,
+                        "hublink_containers": hublink_containers,
+                        "timestamp": time.time()
+                    }
+                except Exception as e:
+                    logger.warning(f"Docker SDK failed, falling back to shell commands: {e}")
+            
+            # Fallback to shell commands
+            logger.debug("Using shell commands to get container status")
             result = self._run_docker_command("docker ps -a --format '{{.Names}}|{{.Status}}|{{.Ports}}|{{.Image}}'")
             if not result or result.returncode != 0:
                 logger.error("Failed to get container status")
@@ -121,15 +206,16 @@ class HublinkManager:
                             "image": parts[3].strip()
                         })
             
-            # Check for active Hublink containers (exclude watchtower and exited containers)
+            # Check for active Hublink gateway containers (exclude hypervisor and watchtower)
             hublink_containers = [
                 c for c in containers 
-                if 'hublink' in c['name'].lower() 
+                if 'hublink-gateway' in c['name'].lower() 
+                and 'hypervisor' not in c['name'].lower()
                 and 'watchtower' not in c['name'].lower()
                 and 'Exited' not in c['status']
             ]
             
-            logger.debug(f"Found {len(hublink_containers)} Hublink containers")
+            logger.debug(f"Found {len(hublink_containers)} Hublink containers using shell commands")
             logger.debug(f"All containers: {[c['name'] for c in containers]}")
             logger.debug(f"Hublink containers: {[c['name'] for c in hublink_containers]}")
             return {
@@ -160,8 +246,8 @@ class HublinkManager:
                     "can_restart": False
                 }
             
-            # Check if any container is running
-            running_containers = [c for c in hublink_containers if "Up" in c["status"]]
+            # Check if any container is running (handle both SDK and shell command formats)
+            running_containers = [c for c in hublink_containers if c["status"] == "running" or "Up" in c["status"]]
             
             if running_containers:
                 return {
@@ -190,7 +276,7 @@ class HublinkManager:
         """Start Hublink containers"""
         try:
             logger.info("Starting Hublink containers")
-            result = self._run_docker_command(f"docker-compose -f {self.compose_file} up -d", timeout=60)
+            result = self._run_docker_command(f"docker compose -f {self.compose_file} up -d", timeout=60)
             
             if result and result.returncode == 0:
                 logger.info("Successfully started Hublink containers")
@@ -208,7 +294,7 @@ class HublinkManager:
         """Stop Hublink containers"""
         try:
             logger.info("Stopping Hublink containers")
-            result = self._run_docker_command(f"docker-compose -f {self.compose_file} down", timeout=45)
+            result = self._run_docker_command(f"docker compose -f {self.compose_file} down", timeout=45)
             
             if result and result.returncode == 0:
                 logger.info("Successfully stopped Hublink containers")
@@ -283,11 +369,11 @@ class InternetChecker:
         try:
             logger.debug("Checking Hublink container internet connectivity")
             
-            # Check container on the appropriate port
+            # Check container on the appropriate port and host
             try:
-                response = requests.get(f"http://localhost:{HUBLINK_PORT}/health", timeout=3)
+                response = requests.get(f"http://{HUBLINK_HOST}:{HUBLINK_PORT}/health", timeout=3)
                 if response.status_code == 200:
-                    logger.debug(f"Hublink container has internet connectivity via port {HUBLINK_PORT}")
+                    logger.debug(f"Hublink container has internet connectivity via {HUBLINK_HOST}:{HUBLINK_PORT}")
                     return True
                 else:
                     logger.warning(f"Hublink container health check failed with status: {response.status_code}")
@@ -357,10 +443,10 @@ def status():
         gateway_name = None
         if container_state.get("state") == "running":
             try:
-                response = requests.get(f"http://localhost:{HUBLINK_PORT}/status", timeout=3)
+                response = requests.get(f"http://{HUBLINK_HOST}:{HUBLINK_PORT}/status", timeout=3)
                 if response.status_code in [200, 500]:  # Accept both 200 and 500 as valid responses
                     hublink_status = response.json()
-                    logger.debug(f"Hublink API connected via port {HUBLINK_PORT}")
+                    logger.debug(f"Hublink API connected via {HUBLINK_HOST}:{HUBLINK_PORT}")
                     # Get secret_url and gateway_name if available
                     secret_url = hublink_status.get("secret_url")
                     gateway_name = hublink_status.get("gateway_name")
@@ -461,8 +547,8 @@ def get_logs():
     try:
         logger.debug("Logs requested")
         
-        # Get the last 20 lines of docker-compose logs
-        result = hublink_manager._run_docker_command("docker-compose -f docker-compose.macos.yml logs --tail=20", timeout=10)
+        # Get the last 20 lines of docker-compose logs (only hublink-gateway service)
+        result = hublink_manager._run_docker_command(f"docker compose -f {hublink_manager.compose_file} logs hublink-gateway --tail=20", timeout=10)
         
         if result and result.returncode == 0:
             logs = result.stdout.strip()

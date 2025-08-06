@@ -50,7 +50,7 @@ if [ ! -d "/opt/hublink" ]; then
 fi
 
 # Start the application
-echo "Starting Flask application on http://localhost:8080"
+echo "Starting Flask application on http://localhost:8081"
 echo "Press Ctrl+C to stop the application"
 echo ""
 

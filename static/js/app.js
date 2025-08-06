@@ -164,15 +164,21 @@ class HublinkHypervisor {
             statusText.classList.add('waiting');
         } else if (containerState.state === 'running') {
             // Container is running, check if healthy
-            const isHealthy = !hasErrors && appInternet && containerInternet;
+            const isFullyHealthy = !hasErrors && appInternet && containerInternet;
+            const hasContainerErrors = hasErrors && (data.errors.hublink_internet || data.errors.hublink_api);
 
-            if (isHealthy) {
+            if (isFullyHealthy) {
                 // Healthy: container running, no errors, both internet connections working
                 statusDot.classList.add('healthy');
                 statusText.textContent = 'Healthy';
                 statusText.classList.add('healthy');
+            } else if (hasContainerErrors) {
+                // Container running but has connectivity/API issues
+                statusDot.classList.add('warning');
+                statusText.textContent = 'Partial Issues';
+                statusText.classList.add('warning');
             } else {
-                // Unhealthy: container running but has issues
+                // Container running but has other issues
                 statusDot.classList.add('warning');
                 statusText.textContent = 'Unhealthy';
                 statusText.classList.add('warning');
@@ -212,22 +218,41 @@ class HublinkHypervisor {
 
                 // Check if container is healthy
                 if (status.includes('unhealthy')) {
-                    detailedMessage = `Container is unhealthy (${status})`;
-
-                    // Add container errors if available
+                    // Provide more meaningful explanation of unhealthy status
                     if (containerErrors && Object.keys(containerErrors).length > 0) {
                         const errorMessages = [];
                         for (const [category, error] of Object.entries(containerErrors)) {
-                            if (category !== 'hublink_api' && category !== 'hublink_internet') {
+                            if (category === 'hublink_internet') {
+                                errorMessages.push('No internet connectivity');
+                            } else if (category === 'hublink_api') {
+                                errorMessages.push('API communication failed');
+                            } else {
+                                errorMessages.push(`${category}: ${error}`);
+                            }
+                        }
+                        detailedMessage = `Container health check failed: ${errorMessages.join(', ')}`;
+                    } else {
+                        detailedMessage = `Container health check is failing - the container may have internal issues or be unable to respond to health checks`;
+                    }
+                } else if (status.includes('healthy')) {
+                    detailedMessage = `Container is healthy`;
+
+                    // Add specific issues if container is healthy but system has problems
+                    if (containerErrors && Object.keys(containerErrors).length > 0) {
+                        const errorMessages = [];
+                        for (const [category, error] of Object.entries(containerErrors)) {
+                            if (category === 'hublink_internet') {
+                                errorMessages.push('Container internet connectivity issue');
+                            } else if (category === 'hublink_api') {
+                                errorMessages.push('Container API communication issue');
+                            } else {
                                 errorMessages.push(`${category}: ${error}`);
                             }
                         }
                         if (errorMessages.length > 0) {
-                            detailedMessage += ` - Issues: ${errorMessages.join(', ')}`;
+                            detailedMessage += ` - System issues: ${errorMessages.join(', ')}`;
                         }
                     }
-                } else if (status.includes('healthy')) {
-                    detailedMessage = `Container is healthy`;
                 } else {
                     detailedMessage = `Container status: ${status}`;
                 }
@@ -499,24 +524,31 @@ class HublinkHypervisor {
             return;
         }
 
+        // Add timestamp header
+        const now = new Date();
+        const timestampHeader = `<div class="log-line timestamp-header">Logs fetched at: ${now.toLocaleString()}</div>`;
+
         // Split logs into lines and create log line elements
         const lines = logs.split('\n');
         const logLines = lines.map(line => {
             if (!line.trim()) return '';
 
+            // Clean the log line (strip ANSI codes and container prefix)
+            const cleanLine = this.cleanLogLine(line);
+
             let className = '';
-            if (line.toLowerCase().includes('error') || line.toLowerCase().includes('failed')) {
+            if (cleanLine.toLowerCase().includes('error') || cleanLine.toLowerCase().includes('failed')) {
                 className = 'error';
-            } else if (line.toLowerCase().includes('warning') || line.toLowerCase().includes('warn')) {
+            } else if (cleanLine.toLowerCase().includes('warning') || cleanLine.toLowerCase().includes('warn')) {
                 className = 'warning';
-            } else if (line.toLowerCase().includes('info') || line.toLowerCase().includes('success')) {
+            } else if (cleanLine.toLowerCase().includes('info') || cleanLine.toLowerCase().includes('success')) {
                 className = 'info';
             }
 
-            return `<div class="log-line ${className}">${this.escapeHtml(line)}</div>`;
+            return `<div class="log-line ${className}">${this.escapeHtml(cleanLine)}</div>`;
         }).filter(line => line !== '');
 
-        logsContent.innerHTML = logLines.join('');
+        logsContent.innerHTML = timestampHeader + logLines.join('');
 
         // Scroll to bottom
         logsContent.scrollTop = logsContent.scrollHeight;
@@ -526,6 +558,21 @@ class HublinkHypervisor {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    stripAnsiCodes(text) {
+        // Remove ANSI color codes and formatting
+        return text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
+    }
+
+    cleanLogLine(text) {
+        // Strip ANSI codes first
+        let cleanLine = this.stripAnsiCodes(text);
+
+        // Remove container name prefix (e.g., "hublink-hublink-gateway-1  | ")
+        cleanLine = cleanLine.replace(/^[a-zA-Z0-9\-_]+\s*\|\s*/, '');
+
+        return cleanLine;
     }
 
     clearLogs() {
