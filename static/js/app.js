@@ -6,7 +6,7 @@
 class HublinkHypervisor {
     constructor() {
         this.autoRefreshInterval = null;
-        this.refreshInterval = 5000; // 5 seconds
+        this.refreshInterval = 10000; // 10 seconds
         this.isLoading = false;
 
         this.initializeElements();
@@ -420,27 +420,83 @@ class HublinkHypervisor {
     }
 
     updateContainerInfoSection(containerState) {
+        console.log('=== CONTAINER INFO DEBUG START ===');
+        console.log('Container state:', containerState);
+        console.log('Container state type:', typeof containerState);
+        console.log('Container state keys:', Object.keys(containerState || {}));
+
         const hasContainers = containerState && containerState.containers && containerState.containers.length > 0;
+        console.log('Has containers:', hasContainers);
+
+        if (containerState && containerState.containers) {
+            console.log('Containers array length:', containerState.containers.length);
+            console.log('First container:', containerState.containers[0]);
+        }
 
         if (hasContainers) {
             this.elements.containerInfoSection.style.display = 'block';
+            console.log('Calling updateUptimeTimer with:', containerState.containers[0]);
             this.updateUptimeTimer(containerState.containers[0]);
         } else {
             this.elements.containerInfoSection.style.display = 'none';
+            console.log('No containers found, hiding container info section');
         }
+        console.log('=== CONTAINER INFO DEBUG END ===');
     }
 
     updateUptimeTimer(container) {
-        if (!container || !container.status) return;
+        console.log('=== UPTIME DEBUG START ===');
+        console.log('Container object:', container);
+        console.log('Container type:', typeof container);
+        console.log('Container keys:', Object.keys(container || {}));
 
-        // Extract uptime from status string like "Up 18 minutes (unhealthy)"
-        const statusMatch = container.status.match(/Up\s+([^(]+)/);
-        if (statusMatch) {
-            const uptimeText = statusMatch[1].trim();
-            this.elements.uptimeTimer.textContent = uptimeText;
-        } else {
+        if (!container) {
+            console.log('ERROR: Container is null/undefined');
             this.elements.uptimeTimer.textContent = '--:--:--';
+            return;
         }
+
+        if (!container.status) {
+            console.log('ERROR: Container.status is missing');
+            console.log('Available container properties:', Object.keys(container));
+            this.elements.uptimeTimer.textContent = '--:--:--';
+            return;
+        }
+
+        console.log('Container status type:', typeof container.status);
+        console.log('Container status value:', container.status);
+        console.log('Container status length:', container.status.length);
+
+        // Try multiple patterns to extract uptime from different Docker status formats
+        let uptimeText = '--:--:--';
+
+        // Pattern 1: "Up 18 minutes (unhealthy)" or "Up 2 hours (healthy)"
+        let statusMatch = container.status.match(/Up\s+([^(]+)/);
+        console.log('Pattern 1 match:', statusMatch);
+        if (statusMatch) {
+            uptimeText = statusMatch[1].trim();
+            console.log('Pattern 1 success, uptime:', uptimeText);
+        } else {
+            // Pattern 2: "Up 18 minutes" (no health status)
+            statusMatch = container.status.match(/Up\s+(.+)/);
+            console.log('Pattern 2 match:', statusMatch);
+            if (statusMatch) {
+                uptimeText = statusMatch[1].trim();
+                console.log('Pattern 2 success, uptime:', uptimeText);
+            } else {
+                // Pattern 3: Just "Up" (very short uptime)
+                if (container.status.includes('Up')) {
+                    uptimeText = 'Just started';
+                    console.log('Pattern 3 success, uptime:', uptimeText);
+                } else {
+                    console.log('No patterns matched');
+                }
+            }
+        }
+
+        this.elements.uptimeTimer.textContent = uptimeText;
+        console.log('Final uptime text:', uptimeText);
+        console.log('=== UPTIME DEBUG END ===');
     }
 
     updateStatusElement(element, isConnected, label) {

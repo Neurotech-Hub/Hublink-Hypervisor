@@ -183,7 +183,7 @@ def get_hublink_host():
 HUBLINK_HOST = get_hublink_host()
 
 # Global auto-fix state
-auto_fix_enabled = False
+auto_fix_enabled = True  # Enable auto-fix by default
 unhealthy_start_time = None
 last_fix_attempt = None
 
@@ -225,10 +225,10 @@ class AutoFixManager:
             logger.info("Container became unhealthy, starting auto-fix timer")
             return False
         
-        # Check if unhealthy for more than 1 minute
+        # Check if unhealthy for more than 5 minutes
         unhealthy_duration = current_time - unhealthy_start_time
-        if unhealthy_duration < 60:  # Less than 1 minute
-            logger.debug(f"Container unhealthy for {unhealthy_duration:.1f}s, waiting for 60s threshold")
+        if unhealthy_duration < 300:  # Less than 5 minutes
+            logger.debug(f"Container unhealthy for {unhealthy_duration:.1f}s, waiting for 300s threshold")
             return False
         
         # Check if we've already attempted a fix recently (prevent spam)
@@ -461,8 +461,41 @@ class HublinkManager:
                 try:
                     containers = []
                     for container in self.docker_client.containers.list(all=True):
-                        # Get container status
-                        status = container.status
+                        # Get detailed status from container attributes
+                        detailed_status = container.attrs.get('State', {}).get('Status', container.status)
+                        
+                        # Get uptime information
+                        started_at = container.attrs.get('State', {}).get('StartedAt')
+                        uptime_info = ""
+                        if started_at and started_at != "0001-01-01T00:00:00Z":
+                            try:
+                                # Parse the started time and calculate uptime
+                                from datetime import datetime
+                                start_time = datetime.fromisoformat(started_at.replace('Z', '+00:00'))
+                                current_time = datetime.now(start_time.tzinfo)
+                                uptime_delta = current_time - start_time
+                                
+                                # Format uptime
+                                if uptime_delta.days > 0:
+                                    uptime_info = f"Up {uptime_delta.days} day{'s' if uptime_delta.days != 1 else ''}"
+                                elif uptime_delta.seconds >= 3600:
+                                    hours = uptime_delta.seconds // 3600
+                                    uptime_info = f"Up {hours} hour{'s' if hours != 1 else ''}"
+                                elif uptime_delta.seconds >= 60:
+                                    minutes = uptime_delta.seconds // 60
+                                    uptime_info = f"Up {minutes} minute{'s' if minutes != 1 else ''}"
+                                else:
+                                    uptime_info = "Up just now"
+                            except Exception as e:
+                                logger.debug(f"Error calculating uptime: {e}")
+                                uptime_info = "Up"
+                        
+                        # Get health status
+                        health_status = container.attrs.get('State', {}).get('Health', {}).get('Status', '')
+                        if health_status:
+                            detailed_status = f"{uptime_info} ({health_status})" if uptime_info else f"Up ({health_status})"
+                        else:
+                            detailed_status = uptime_info if uptime_info else "Up"
                         
                         # Get ports
                         ports = []
@@ -474,7 +507,7 @@ class HublinkManager:
                         
                         containers.append({
                             "name": container.name,
-                            "status": status,
+                            "status": detailed_status,
                             "ports": ports_str,
                             "image": container.image.tags[0] if container.image.tags else container.image.id
                         })
