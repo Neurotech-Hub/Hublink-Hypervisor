@@ -248,6 +248,12 @@ class AutoFixManager:
             last_fix_attempt = current_time
             return self._apply_internet_fix()
         
+        # Check for any other errors (generic fix)
+        if container_errors and len(container_errors) > 0:
+            logger.info(f"Generic error detected: {list(container_errors.keys())}, applying generic fix")
+            last_fix_attempt = current_time
+            return self._apply_generic_fix()
+        
         return False
     
     def _has_ble_error(self, container_errors):
@@ -393,6 +399,38 @@ class AutoFixManager:
             
         except Exception as e:
             logger.error(f"Error during internet connectivity fix sequence: {e}")
+            return False
+
+    def _apply_generic_fix(self):
+        """Apply generic fix for any error: docker down then up"""
+        try:
+            logger.info("Starting generic fix sequence")
+            
+            # Step 1: Stop the hublink container
+            logger.info("Step 1: Stopping hublink container")
+            if self.hublink_manager:
+                result = self.hublink_manager.stop_containers()
+                if not result.get('success'):
+                    logger.error("Failed to stop hublink container")
+                    return False
+            
+            # Wait for container to fully stop
+            logger.info("Waiting for container to fully stop...")
+            time.sleep(10)
+            
+            # Step 2: Start the hublink container
+            logger.info("Step 2: Starting hublink container")
+            if self.hublink_manager:
+                result = self.hublink_manager.start_containers()
+                if not result.get('success'):
+                    logger.error("Failed to start hublink container")
+                    return False
+            
+            logger.info("Generic fix sequence completed successfully")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error during generic fix sequence: {e}")
             return False
 
 class HublinkManager:
