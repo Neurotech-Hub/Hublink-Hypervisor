@@ -44,6 +44,12 @@ class HublinkHypervisor {
             // Gateway elements
             gatewayTag: document.getElementById('gateway-tag'),
 
+            // Container info elements
+            containerInfoSection: document.getElementById('container-info-section'),
+            containerGatewayTag: document.getElementById('container-gateway-tag'),
+            uptimeTimer: document.getElementById('uptime-timer'),
+            autoRestartToggle: document.getElementById('auto-restart-toggle'),
+
             // Logs elements
             logsContent: document.getElementById('logs-content'),
 
@@ -60,6 +66,9 @@ class HublinkHypervisor {
         this.elements.startBtn.addEventListener('click', () => this.startContainers());
         this.elements.stopBtn.addEventListener('click', () => this.stopContainers());
         this.elements.restartBtn.addEventListener('click', () => this.restartContainers());
+
+        // Auto-fix toggle
+        this.elements.autoRestartToggle.addEventListener('change', (e) => this.toggleAutoFix(e.target.checked));
 
 
 
@@ -104,6 +113,9 @@ class HublinkHypervisor {
             this.updateUI(data);
             this.updateLastUpdated();
 
+            // Load auto-fix status
+            await this.loadAutoFixStatus();
+
         } catch (error) {
             console.error('Error loading status:', error);
             this.showError('Failed to load system status');
@@ -112,6 +124,41 @@ class HublinkHypervisor {
             if (showLoading) {
                 this.hideLoading();
             }
+        }
+    }
+
+    async loadAutoFixStatus() {
+        try {
+            const response = await fetch('/api/autofix/status');
+            const data = await response.json();
+            this.elements.autoRestartToggle.checked = data.enabled;
+        } catch (error) {
+            console.error('Error loading auto-fix status:', error);
+        }
+    }
+
+    async toggleAutoFix(enabled) {
+        try {
+            const response = await fetch('/api/autofix/toggle', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ enabled })
+            });
+
+            const data = await response.json();
+            if (data.success) {
+                console.log(`Auto-fix ${enabled ? 'enabled' : 'disabled'}`);
+            } else {
+                console.error('Failed to toggle auto-fix:', data.error);
+                // Revert the toggle if it failed
+                this.elements.autoRestartToggle.checked = !enabled;
+            }
+        } catch (error) {
+            console.error('Error toggling auto-fix:', error);
+            // Revert the toggle if it failed
+            this.elements.autoRestartToggle.checked = !enabled;
         }
     }
 
@@ -124,6 +171,7 @@ class HublinkHypervisor {
         // Update container information
         if (data.container_state) {
             this.updateContainerState(data.container_state, data.errors);
+            this.updateContainerInfoSection(data.container_state);
         }
 
         // Update internet connectivity
@@ -165,7 +213,7 @@ class HublinkHypervisor {
         } else if (containerState.state === 'running') {
             // Container is running, check if healthy
             const isFullyHealthy = !hasErrors && appInternet && containerInternet;
-            const hasContainerErrors = hasErrors && (data.errors.hublink_internet || data.errors.hublink_api);
+            const hasContainerErrors = hasErrors && (data.errors.hublink_internet || data.errors.hublink_api || data.errors.ble);
 
             if (isFullyHealthy) {
                 // Healthy: container running, no errors, both internet connections working
@@ -226,6 +274,8 @@ class HublinkHypervisor {
                                 errorMessages.push('No internet connectivity');
                             } else if (category === 'hublink_api') {
                                 errorMessages.push('API communication failed');
+                            } else if (category === 'ble') {
+                                errorMessages.push('BLE device connectivity failed');
                             } else {
                                 errorMessages.push(`${category}: ${error}`);
                             }
@@ -245,6 +295,8 @@ class HublinkHypervisor {
                                 errorMessages.push('Container internet connectivity issue');
                             } else if (category === 'hublink_api') {
                                 errorMessages.push('Container API communication issue');
+                            } else if (category === 'ble') {
+                                errorMessages.push('BLE device connectivity issue');
                             } else {
                                 errorMessages.push(`${category}: ${error}`);
                             }
@@ -301,6 +353,9 @@ class HublinkHypervisor {
             containerState.can_stop || false,
             containerState.can_restart || false
         );
+
+        // Update container info section
+        this.updateContainerInfoSection(containerState);
     }
 
     updateContainerList(containers) {
@@ -358,10 +413,33 @@ class HublinkHypervisor {
 
     updateGatewayTag(gatewayName) {
         if (gatewayName) {
-            this.elements.gatewayTag.textContent = gatewayName;
-            this.elements.gatewayTag.style.display = 'inline';
+            this.elements.containerGatewayTag.textContent = gatewayName;
         } else {
-            this.elements.gatewayTag.style.display = 'none';
+            this.elements.containerGatewayTag.textContent = '-';
+        }
+    }
+
+    updateContainerInfoSection(containerState) {
+        const hasContainers = containerState && containerState.containers && containerState.containers.length > 0;
+
+        if (hasContainers) {
+            this.elements.containerInfoSection.style.display = 'block';
+            this.updateUptimeTimer(containerState.containers[0]);
+        } else {
+            this.elements.containerInfoSection.style.display = 'none';
+        }
+    }
+
+    updateUptimeTimer(container) {
+        if (!container || !container.status) return;
+
+        // Extract uptime from status string like "Up 18 minutes (unhealthy)"
+        const statusMatch = container.status.match(/Up\s+([^(]+)/);
+        if (statusMatch) {
+            const uptimeText = statusMatch[1].trim();
+            this.elements.uptimeTimer.textContent = uptimeText;
+        } else {
+            this.elements.uptimeTimer.textContent = '--:--:--';
         }
     }
 

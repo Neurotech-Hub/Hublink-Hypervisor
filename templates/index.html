@@ -19,12 +19,38 @@
             <!-- Dashboard Tab -->
             <div class="tab-content active" id="dashboard-tab">
                 <div class="dashboard-content">
+                    <!-- Container Info Section -->
+                    <div class="container-info-section" id="container-info-section" style="display: none;">
+                        <div class="container-info-grid">
+                            <div class="container-info-item">
+                                <div class="container-name-display">
+                                    <span class="container-name-label">Container Name</span>
+                                    <span class="container-name-value" id="container-gateway-tag">-</span>
+                                </div>
+                            </div>
+                            <div class="container-info-item">
+                                <div class="uptime-timer">
+                                    <span class="uptime-label">Uptime</span>
+                                    <span class="uptime-value" id="uptime-timer">--:--:--</span>
+                                </div>
+                            </div>
+                            <div class="container-info-item">
+                                <div class="auto-restart-toggle">
+                                    <span class="toggle-label">Auto-fix if Unhealthy</span>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="auto-restart-toggle">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- System Status Table -->
                     <div class="status-table">
                         <div class="table-header">
                             <div class="header-left-content">
                                 <h2>System Report</h2>
-                                <span class="gateway-tag" id="gateway-tag" style="display: none;"></span>
                             </div>
                             <div class="table-actions">
                                 <button class="btn btn-primary" id="start-btn" disabled>Start</button>

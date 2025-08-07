@@ -18,7 +18,7 @@ import docker
 
 # Configure logging
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,  # Changed from DEBUG to INFO
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.FileHandler('hublink_hypervisor.log'),
@@ -26,6 +26,11 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+# Reduce verbosity of specific loggers
+logging.getLogger('urllib3.connectionpool').setLevel(logging.WARNING)
+logging.getLogger('werkzeug').setLevel(logging.WARNING)
+logging.getLogger('docker').setLevel(logging.WARNING)
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for development
@@ -35,12 +40,109 @@ HUBLINK_PATH = '/opt/hublink'
 DOCKER_COMPOSE_FILE = 'docker-compose.yml'
 DOCKER_COMPOSE_MAC_FILE = 'docker-compose.macos.yml'
 
+def detect_environment():
+    """Detect if we're running in development (macOS) or production (Linux) environment"""
+    try:
+        # Method 1: Check if we're inside a Docker container and get host info
+        if os.path.exists('/.dockerenv'):
+            logger.info("Running inside Docker container, checking host system...")
+            try:
+                # Use Docker API to get host system information
+                import docker
+                client = docker.from_env()
+                info = client.info()
+                
+                if 'OperatingSystem' in info:
+                    os_name = info['OperatingSystem']
+                    logger.info(f"Docker host OS: {os_name}")
+                    
+                    if 'macOS' in os_name or 'Darwin' in os_name:
+                        logger.info("Environment detected: Docker Desktop on macOS (Development)")
+                        return "development"
+                    elif 'Linux' in os_name:
+                        # Check if it's a Raspberry Pi
+                        if 'Raspberry Pi' in os_name or 'arm' in os_name.lower():
+                            logger.info("Environment detected: Docker on Raspberry Pi (Production)")
+                            return "production"
+                        else:
+                            logger.info("Environment detected: Docker on Linux (Production)")
+                            return "production"
+                
+                # Fallback: Check Docker Desktop specific indicators
+                if 'Docker Desktop' in str(info):
+                    logger.info("Environment detected: Docker Desktop detected (Development)")
+                    return "development"
+                    
+            except Exception as e:
+                logger.warning(f"Could not get Docker host info: {e}")
+        
+        # Method 2: Check the container's system (fallback)
+        import subprocess
+        result = subprocess.run(['uname', '-s'], capture_output=True, text=True, timeout=5)
+        if result.returncode == 0:
+            system = result.stdout.strip()
+            if system == "Darwin":  # macOS (if running natively)
+                logger.info("Environment detected: macOS (Development)")
+                return "development"
+            elif system == "Linux":  # Linux
+                # Check for Raspberry Pi specific indicators
+                try:
+                    if os.path.exists('/proc/cpuinfo'):
+                        with open('/proc/cpuinfo', 'r') as f:
+                            cpuinfo = f.read()
+                            if 'Raspberry Pi' in cpuinfo or 'BCM2708' in cpuinfo or 'BCM2835' in cpuinfo:
+                                logger.info("Environment detected: Raspberry Pi (Production)")
+                                return "production"
+                    
+                    # Check for ARM architecture
+                    arch_result = subprocess.run(['uname', '-m'], capture_output=True, text=True, timeout=5)
+                    if arch_result.returncode == 0:
+                        arch = arch_result.stdout.strip()
+                        if arch in ['armv7l', 'aarch64', 'arm64']:
+                            logger.info("Environment detected: ARM Linux (Production)")
+                            return "production"
+                except Exception:
+                    pass
+        
+        # Method 3: Check Python platform (least reliable in container)
+        import platform
+        system = platform.system()
+        if system == "Darwin":
+            logger.info("Environment detected: macOS via Python platform (Development)")
+            return "development"
+        elif system == "Linux":
+            logger.info("Environment detected: Linux via Python platform (Production)")
+            return "production"
+        
+        # Ultimate fallback - assume production if we can't determine
+        logger.warning("Could not detect environment, defaulting to production")
+        return "production"
+        
+    except Exception as e:
+        logger.error(f"Error detecting environment: {e}")
+        logger.warning("Could not detect environment, defaulting to production")
+        return "production"
+
+# Detect environment at startup
+ENVIRONMENT = detect_environment()
+IS_DEVELOPMENT = ENVIRONMENT == "development"
+IS_PRODUCTION = ENVIRONMENT == "production"
+
+logger.info(f"Environment: {ENVIRONMENT} (Development: {IS_DEVELOPMENT}, Production: {IS_PRODUCTION})")
+
 def get_hublink_port():
     """Dynamically determine the correct port for Hublink container"""
-    # Try port 6000 first (common for development), then fallback to 5000
-    # Retry a few times in case the container is still starting up
+    # Use environment detection to determine default port
+    if IS_DEVELOPMENT:
+        default_port = 6000
+        logger.info("Development environment detected, using port 6000")
+    else:
+        default_port = 5000
+        logger.info("Production environment detected, using port 5000")
+    
+    # Try the default port first, then the other port as fallback
     for attempt in range(3):
-        for port in [6000, 5000]:
+        for port in [default_port, 5000 if default_port == 6000 else 6000]:
             # Try multiple host addresses
             for host in ['localhost', '127.0.0.1', 'host.docker.internal']:
                 try:
@@ -55,9 +157,9 @@ def get_hublink_port():
             logger.debug(f"Port detection attempt {attempt + 1} failed, retrying in 2 seconds...")
             time.sleep(2)
     
-    # Default to 5000 if neither port responds
-    logger.warning("Could not detect Hublink container port, defaulting to 5000")
-    return 5000
+    # Return the default port for the environment
+    logger.info(f"No container found, using default port {default_port} for {ENVIRONMENT} environment")
+    return default_port
 
 HUBLINK_PORT = get_hublink_port()
 logger.info(f"Using Hublink port: {HUBLINK_PORT}")
@@ -80,6 +182,219 @@ def get_hublink_host():
 
 HUBLINK_HOST = get_hublink_host()
 
+# Global auto-fix state
+auto_fix_enabled = False
+unhealthy_start_time = None
+last_fix_attempt = None
+
+class AutoFixManager:
+    """Manages automatic fixing of container issues"""
+    
+    def __init__(self):
+        self.hublink_manager = None  # Will be set after HublinkManager initialization
+    
+    def set_hublink_manager(self, hublink_manager):
+        """Set reference to HublinkManager for container operations"""
+        self.hublink_manager = hublink_manager
+    
+    def check_and_fix_issues(self, container_state, container_errors, app_internet, hublink_internet):
+        """Check if auto-fix is needed and apply fixes"""
+        global auto_fix_enabled, unhealthy_start_time, last_fix_attempt
+        
+        if not auto_fix_enabled:
+            return False
+        
+        # Check if container is unhealthy
+        is_unhealthy = False
+        if container_state and container_state.get('state') == 'running':
+            containers = container_state.get('containers', [])
+            if containers:
+                container = containers[0]
+                if 'unhealthy' in container.get('status', '').lower():
+                    is_unhealthy = True
+        
+        if not is_unhealthy:
+            # Container is healthy, reset unhealthy timer
+            unhealthy_start_time = None
+            return False
+        
+        # Container is unhealthy, start or check timer
+        current_time = time.time()
+        if unhealthy_start_time is None:
+            unhealthy_start_time = current_time
+            logger.info("Container became unhealthy, starting auto-fix timer")
+            return False
+        
+        # Check if unhealthy for more than 1 minute
+        unhealthy_duration = current_time - unhealthy_start_time
+        if unhealthy_duration < 60:  # Less than 1 minute
+            logger.debug(f"Container unhealthy for {unhealthy_duration:.1f}s, waiting for 60s threshold")
+            return False
+        
+        # Check if we've already attempted a fix recently (prevent spam)
+        if last_fix_attempt and (current_time - last_fix_attempt) < 300:  # 5 minutes
+            logger.debug("Fix attempted recently, waiting before next attempt")
+            return False
+        
+        # Check for BLE errors
+        if self._has_ble_error(container_errors):
+            logger.info("BLE error detected, applying BLE fix sequence")
+            last_fix_attempt = current_time
+            return self._apply_ble_fix()
+        
+        # Check for internet connectivity issue: hypervisor has internet but container doesn't
+        if app_internet and not hublink_internet and container_state.get('state') == 'running':
+            logger.info("Internet connectivity issue detected: hypervisor connected but container disconnected")
+            last_fix_attempt = current_time
+            return self._apply_internet_fix()
+        
+        return False
+    
+    def _has_ble_error(self, container_errors):
+        """Check if the error contains BLE-related issues"""
+        if not container_errors:
+            return False
+        
+        # Check all error messages for BLE keywords
+        for category, error in container_errors.items():
+            if isinstance(error, str) and 'ble' in error.lower():
+                return True
+        return False
+    
+    def _apply_ble_fix(self):
+        """Apply BLE fix sequence"""
+        try:
+            logger.info("Starting BLE fix sequence")
+            
+            if IS_DEVELOPMENT:
+                logger.info("Development environment detected, skipping system-level BLE commands")
+                logger.info("Only restarting container for BLE fix test")
+                
+                # Step 1: Stop the hublink container
+                logger.info("Step 1: Stopping hublink container")
+                if self.hublink_manager:
+                    result = self.hublink_manager.stop_containers()
+                    if not result.get('success'):
+                        logger.error("Failed to stop hublink container")
+                        return False
+                
+                # Wait for container to fully stop
+                logger.info("Waiting for container to fully stop...")
+                time.sleep(10)
+                
+                # Step 2: Start the hublink container (development mode - just restart)
+                logger.info("Step 2: Starting hublink container (development mode)")
+                if self.hublink_manager:
+                    result = self.hublink_manager.start_containers()
+                    if not result.get('success'):
+                        logger.error("Failed to start hublink container")
+                        return False
+                
+                logger.info("BLE fix sequence completed (development mode)")
+                return True
+            
+            else:
+                logger.info("Production environment detected, applying full BLE fix sequence")
+                
+                # Step 1: Stop the hublink container
+                logger.info("Step 1: Stopping hublink container")
+                if self.hublink_manager:
+                    result = self.hublink_manager.stop_containers()
+                    if not result.get('success'):
+                        logger.error("Failed to stop hublink container")
+                        return False
+                
+                # Wait for container to fully stop
+                logger.info("Waiting for container to fully stop...")
+                time.sleep(10)
+                
+                # Step 2: Stop bluetooth service
+                logger.info("Step 2: Stopping bluetooth service")
+                result = subprocess.run(['sudo', 'systemctl', 'stop', 'bluetooth'], 
+                                      capture_output=True, text=True, timeout=30)
+                if result.returncode != 0:
+                    logger.warning(f"Failed to stop bluetooth service: {result.stderr}")
+                
+                # Step 3: Kill bluetoothd process
+                logger.info("Step 3: Killing bluetoothd process")
+                result = subprocess.run(['sudo', 'pkill', '-9', 'bluetoothd'], 
+                                      capture_output=True, text=True, timeout=30)
+                # pkill returns 1 if no processes found, which is OK
+                if result.returncode not in [0, 1]:
+                    logger.warning(f"Unexpected pkill result: {result.stderr}")
+                
+                # Step 4: Remove btusb module
+                logger.info("Step 4: Removing btusb module")
+                result = subprocess.run(['sudo', 'modprobe', '-r', 'btusb'], 
+                                      capture_output=True, text=True, timeout=30)
+                if result.returncode != 0:
+                    logger.warning(f"Failed to remove btusb module: {result.stderr}")
+                
+                # Step 5: Reload btusb module
+                logger.info("Step 5: Reloading btusb module")
+                result = subprocess.run(['sudo', 'modprobe', 'btusb'], 
+                                      capture_output=True, text=True, timeout=30)
+                if result.returncode != 0:
+                    logger.warning(f"Failed to reload btusb module: {result.stderr}")
+                
+                # Step 6: Start bluetooth service
+                logger.info("Step 6: Starting bluetooth service")
+                result = subprocess.run(['sudo', 'systemctl', 'start', 'bluetooth'], 
+                                      capture_output=True, text=True, timeout=30)
+                if result.returncode != 0:
+                    logger.warning(f"Failed to start bluetooth service: {result.stderr}")
+                
+                # Wait for bluetooth to initialize
+                logger.info("Waiting for bluetooth to initialize...")
+                time.sleep(5)
+                
+                # Step 7: Start the hublink container
+                logger.info("Step 7: Starting hublink container")
+                if self.hublink_manager:
+                    result = self.hublink_manager.start_containers()
+                    if not result.get('success'):
+                        logger.error("Failed to start hublink container")
+                        return False
+                
+                logger.info("BLE fix sequence completed successfully")
+                return True
+            
+        except Exception as e:
+            logger.error(f"Error during BLE fix sequence: {e}")
+            return False
+
+    def _apply_internet_fix(self):
+        """Apply internet connectivity fix: docker down then up"""
+        try:
+            logger.info("Starting internet connectivity fix sequence")
+            
+            # Step 1: Stop the hublink container
+            logger.info("Step 1: Stopping hublink container")
+            if self.hublink_manager:
+                result = self.hublink_manager.stop_containers()
+                if not result.get('success'):
+                    logger.error("Failed to stop hublink container")
+                    return False
+            
+            # Wait for container to fully stop
+            logger.info("Waiting for container to fully stop...")
+            time.sleep(10)
+            
+            # Step 2: Start the hublink container
+            logger.info("Step 2: Starting hublink container")
+            if self.hublink_manager:
+                result = self.hublink_manager.start_containers()
+                if not result.get('success'):
+                    logger.error("Failed to start hublink container")
+                    return False
+            
+            logger.info("Internet connectivity fix sequence completed successfully")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error during internet connectivity fix sequence: {e}")
+            return False
+
 class HublinkManager:
     """Manages Hublink Docker container operations and status monitoring"""
     
@@ -96,22 +411,22 @@ class HublinkManager:
         logger.info(f"Using compose file: {self.compose_file}")
     
     def _get_compose_file(self):
-        """Determine which docker-compose file to use based on OS"""
-        system = platform.system().lower()
-        
-        if system == "darwin":  # macOS
+        """Determine which docker-compose file to use based on environment detection"""
+        if IS_DEVELOPMENT:
+            # Development environment - try macOS compose file first
             if os.path.exists(os.path.join(self.hublink_path, DOCKER_COMPOSE_MAC_FILE)):
-                logger.debug("Detected macOS environment, using docker-compose.macos.yml")
+                logger.info(f"Development environment detected, using {DOCKER_COMPOSE_MAC_FILE}")
                 return DOCKER_COMPOSE_MAC_FILE
             else:
-                logger.warning("macOS detected but docker-compose.macos.yml not found, falling back to docker-compose.yml")
+                logger.warning(f"Development environment detected but {DOCKER_COMPOSE_MAC_FILE} not found, falling back to {DOCKER_COMPOSE_FILE}")
                 return DOCKER_COMPOSE_FILE
-        else:  # Linux (production)
+        else:
+            # Production environment - use standard compose file
             if os.path.exists(os.path.join(self.hublink_path, DOCKER_COMPOSE_FILE)):
-                logger.debug("Detected Linux environment, using docker-compose.yml")
+                logger.info(f"Production environment detected, using {DOCKER_COMPOSE_FILE}")
                 return DOCKER_COMPOSE_FILE
             else:
-                logger.error(f"No docker-compose.yml found in {self.hublink_path}")
+                logger.error(f"No {DOCKER_COMPOSE_FILE} found in {self.hublink_path}")
                 return DOCKER_COMPOSE_FILE
     
     def _run_docker_command(self, command, timeout=30):
@@ -140,7 +455,6 @@ class HublinkManager:
     def get_container_status(self):
         """Get detailed status of Hublink containers"""
         try:
-            logger.debug("Fetching container status")
             
             # Try using Docker Python SDK first
             if self.docker_client:
@@ -175,15 +489,13 @@ class HublinkManager:
                     ]
                     
                     logger.debug(f"Found {len(hublink_containers)} Hublink containers using Docker SDK")
-                    logger.debug(f"All containers: {[c['name'] for c in containers]}")
-                    logger.debug(f"Hublink containers: {[c['name'] for c in hublink_containers]}")
                     return {
-                        "containers": containers,
+                        "containers": hublink_containers,  # Only return filtered containers for display
                         "hublink_containers": hublink_containers,
                         "timestamp": time.time()
                     }
                 except Exception as e:
-                    logger.warning(f"Docker SDK failed, falling back to shell commands: {e}")
+                    logger.debug(f"Docker SDK failed, falling back to shell commands: {e}")
             
             # Fallback to shell commands
             logger.debug("Using shell commands to get container status")
@@ -216,10 +528,8 @@ class HublinkManager:
             ]
             
             logger.debug(f"Found {len(hublink_containers)} Hublink containers using shell commands")
-            logger.debug(f"All containers: {[c['name'] for c in containers]}")
-            logger.debug(f"Hublink containers: {[c['name'] for c in hublink_containers]}")
             return {
-                "containers": containers,
+                "containers": hublink_containers,  # Only return filtered containers for display
                 "hublink_containers": hublink_containers,
                 "timestamp": time.time()
             }
@@ -339,7 +649,6 @@ class InternetChecker:
     def check_app_internet():
         """Check if the hypervisor app has internet connectivity"""
         try:
-            logger.debug("Checking app internet connectivity")
             # Try multiple reliable endpoints
             endpoints = [
                 "https://www.google.com",
@@ -351,10 +660,8 @@ class InternetChecker:
                 try:
                     response = requests.get(endpoint, timeout=3)
                     if response.status_code in [200, 301, 302]:
-                        logger.debug(f"App has internet connectivity via {endpoint}")
                         return True
                 except Exception as e:
-                    logger.debug(f"Failed to connect to {endpoint}: {e}")
                     continue
             
             logger.warning("App internet check failed for all endpoints")
@@ -367,22 +674,19 @@ class InternetChecker:
     def check_hublink_internet():
         """Check if Hublink container has internet connectivity"""
         try:
-            logger.debug("Checking Hublink container internet connectivity")
-            
             # Check container on the appropriate port and host
             try:
-                response = requests.get(f"http://{HUBLINK_HOST}:{HUBLINK_PORT}/health", timeout=3)
-                if response.status_code == 200:
-                    logger.debug(f"Hublink container has internet connectivity via {HUBLINK_HOST}:{HUBLINK_PORT}")
-                    return True
+                response = requests.get(f"http://{HUBLINK_HOST}:{HUBLINK_PORT}/status", timeout=3)
+                if response.status_code in [200, 500]:  # Accept both 200 and 500 as valid responses
+                    hublink_status = response.json()
+                    # Return the actual internet_connected status from the container
+                    return hublink_status.get("internet_connected", False)
                 else:
-                    logger.warning(f"Hublink container health check failed with status: {response.status_code}")
+                    logger.debug(f"Hublink container status check failed with status: {response.status_code}")
                     return False
             except requests.exceptions.RequestException:
-                logger.warning("Hublink container health check failed - connection refused")
+                logger.debug("Hublink container status check failed - connection refused")
                 return False
-            
-
             
         except Exception as e:
             logger.error(f"Hublink container internet check failed: {e}")
@@ -391,6 +695,8 @@ class InternetChecker:
 # Initialize managers
 hublink_manager = HublinkManager()
 internet_checker = InternetChecker()
+auto_fix_manager = AutoFixManager()
+auto_fix_manager.set_hublink_manager(hublink_manager)
 
 @app.route('/')
 def index():
@@ -398,22 +704,12 @@ def index():
     logger.debug("Serving main dashboard")
     return render_template('index.html')
 
-@app.route('/api/health')
-def health():
-    """Health check endpoint"""
-    logger.debug("Health check requested")
-    return jsonify({
-        "status": "ok",
-        "timestamp": time.time(),
-        "service": "hublink-hypervisor"
-    })
+
 
 @app.route('/api/status')
 def status():
     """Get comprehensive system status"""
     try:
-        logger.debug("Status check requested")
-        
         # Get container state
         container_state = hublink_manager.get_container_state()
         
@@ -433,6 +729,8 @@ def status():
             errors["app_internet"] = "Hypervisor app has no internet connectivity"
             timestamps["app_internet"] = time.time()
         
+        # Only add hublink_internet error if we can't connect to the container at all
+        # The container's own status endpoint will report its specific issues
         if container_state.get("state") == "running" and not hublink_internet:
             errors["hublink_internet"] = "Hublink container has no internet connectivity"
             timestamps["hublink_internet"] = time.time()
@@ -461,6 +759,9 @@ def status():
                 errors["hublink_api"] = f"Failed to connect to Hublink API: {str(e)}"
                 timestamps["hublink_api"] = time.time()
         
+        # Check for auto-fix opportunities
+        auto_fix_applied = auto_fix_manager.check_and_fix_issues(container_state, errors, app_internet, hublink_internet)
+        
         # Determine overall status
         if errors:
             status_response = {
@@ -473,6 +774,7 @@ def status():
                 "hublink_status": hublink_status,
                 "secret_url": secret_url,
                 "gateway_name": gateway_name,
+                "auto_fix_applied": auto_fix_applied,
                 "timestamp": time.time()
             }
         else:
@@ -484,10 +786,10 @@ def status():
                 "hublink_status": hublink_status,
                 "secret_url": secret_url,
                 "gateway_name": gateway_name,
+                "auto_fix_applied": auto_fix_applied,
                 "timestamp": time.time()
             }
         
-        logger.debug(f"Status response: {status_response}")
         return jsonify(status_response)
         
     except Exception as e:
@@ -574,6 +876,35 @@ def get_logs():
             "error": str(e),
             "timestamp": time.time()
         }), 500
+
+@app.route('/api/autofix/status')
+def get_autofix_status():
+    """Get auto-fix status"""
+    global auto_fix_enabled
+    return jsonify({
+        "enabled": auto_fix_enabled,
+        "timestamp": time.time()
+    })
+
+@app.route('/api/autofix/toggle', methods=['POST'])
+def toggle_autofix():
+    """Toggle auto-fix on/off"""
+    global auto_fix_enabled
+    try:
+        data = request.get_json()
+        if data and 'enabled' in data:
+            auto_fix_enabled = bool(data['enabled'])
+            logger.info(f"Auto-fix {'enabled' if auto_fix_enabled else 'disabled'}")
+            return jsonify({
+                "success": True,
+                "enabled": auto_fix_enabled,
+                "message": f"Auto-fix {'enabled' if auto_fix_enabled else 'disabled'}"
+            })
+        else:
+            return jsonify({"error": "Missing 'enabled' parameter"}), 400
+    except Exception as e:
+        logger.error(f"Error toggling auto-fix: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/internet/check')
 def check_internet():
