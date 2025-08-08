@@ -108,17 +108,23 @@ class HublinkHypervisor {
         try {
             console.log('Loading system status...');
             const response = await fetch('/api/status');
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
             const data = await response.json();
 
             this.updateUI(data);
             this.updateLastUpdated();
+            this.hideOfflineState();
 
             // Load auto-fix status
             await this.loadAutoFixStatus();
 
         } catch (error) {
             console.error('Error loading status:', error);
-            this.showError('Failed to load system status');
+            this.showOfflineState();
         } finally {
             this.isLoading = false;
             if (showLoading) {
@@ -625,6 +631,46 @@ class HublinkHypervisor {
         // Simple error notification - could be enhanced with a toast library
         console.error('Error:', message);
         // For now, just log to console. In a real app, you might want to show a toast notification
+    }
+
+    showOfflineState() {
+        console.log('Showing offline state');
+
+        // Update header status to show offline
+        const statusDot = this.elements.statusDot;
+        const statusText = this.elements.statusText;
+
+        statusDot.className = 'status-dot error';
+        statusText.textContent = 'Offline';
+        statusText.className = 'status-text error';
+
+        // Update container state
+        this.elements.containerState.textContent = 'Offline';
+        this.elements.containerState.className = 'status-value error';
+        this.elements.containerMessage.textContent = 'Hypervisor Docker Container Not Running';
+
+        // Update internet status
+        this.elements.appInternet.textContent = 'Offline';
+        this.elements.appInternet.className = 'status-value error';
+        this.elements.hublinkInternet.textContent = 'Offline';
+        this.elements.hublinkInternet.className = 'status-value error';
+
+        // Disable all buttons
+        this.updateContainerButtons(false, false, false);
+
+        // Hide container info section
+        this.elements.containerInfoSection.style.display = 'none';
+
+        // Clear logs and show offline message
+        this.elements.logsContent.innerHTML = '<div class="log-line error">Hypervisor container is offline. Please check if the container is running.</div>';
+
+        // Update last updated time
+        this.updateLastUpdated();
+    }
+
+    hideOfflineState() {
+        console.log('Hiding offline state');
+        // The normal updateUI will handle restoring the online state
     }
 
     updateLastUpdated() {
