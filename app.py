@@ -146,6 +146,7 @@ def get_hublink_port():
             # Try multiple host addresses
             for host in ['localhost', '127.0.0.1', 'host.docker.internal']:
                 try:
+                    logger.info(f"Startup: Testing Hublink connection to {host}:{port}/status")
                     response = requests.get(f"http://{host}:{port}/status", timeout=3)
                     if response.status_code in [200, 500]:  # Accept both 200 and 500 as valid responses
                         logger.info(f"Hublink container found on {host}:{port}")
@@ -169,6 +170,7 @@ def get_hublink_host():
     # Try multiple host addresses to find the one that works
     for host in ['localhost', '127.0.0.1', 'host.docker.internal']:
         try:
+            logger.info(f"Startup: Testing Hublink host {host}:{HUBLINK_PORT}/status")
             response = requests.get(f"http://{host}:{HUBLINK_PORT}/status", timeout=2)
             if response.status_code in [200, 500]:
                 logger.debug(f"Using host {host} for Hublink communication")
@@ -186,6 +188,9 @@ HUBLINK_HOST = get_hublink_host()
 auto_fix_enabled = True  # Enable auto-fix by default
 unhealthy_start_time = None
 last_fix_attempt = None
+
+# Debug: Track requests to Hublink /status endpoint
+hublink_status_request_count = 0
 
 class AutoFixManager:
     """Manages automatic fixing of container issues"""
@@ -786,11 +791,42 @@ def status():
         
         # Check internet connectivity
         app_internet = internet_checker.check_app_internet()
-        hublink_internet = internet_checker.check_hublink_internet()
         
-        # Determine overall status
+        # Initialize error tracking
         errors = {}
         timestamps = {}
+        
+        # Check Hublink API status if container is running (single call to get all Hublink info)
+        hublink_status = None
+        secret_url = None
+        gateway_name = None
+        hublink_internet = False
+        
+        if container_state.get("state") == "running":
+            try:
+                global hublink_status_request_count
+                hublink_status_request_count += 1
+                logger.info(f"Making request #{hublink_status_request_count} to Hublink /status endpoint from main /api/status")
+                response = requests.get(f"http://{HUBLINK_HOST}:{HUBLINK_PORT}/status", timeout=3)
+                if response.status_code in [200, 500]:  # Accept both 200 and 500 as valid responses
+                    hublink_status = response.json()
+                    logger.debug(f"Hublink API connected via {HUBLINK_HOST}:{HUBLINK_PORT}")
+                    # Get all the information we need from this single call
+                    hublink_internet = hublink_status.get("internet_connected", False)
+                    secret_url = hublink_status.get("secret_url")
+                    gateway_name = hublink_status.get("gateway_name")
+                    # Merge any Hublink errors
+                    if hublink_status.get("status") == "error":
+                        errors.update(hublink_status.get("errors", {}))
+                        timestamps.update(hublink_status.get("timestamps", {}))
+                else:
+                    errors["hublink_api"] = f"Hublink API returned status {response.status_code}"
+                    timestamps["hublink_api"] = time.time()
+            except Exception as e:
+                errors["hublink_api"] = f"Failed to connect to Hublink API: {str(e)}"
+                timestamps["hublink_api"] = time.time()
+        
+        # Determine overall status
         
         if "error" in container_state:
             errors["container"] = container_state["error"]
@@ -805,30 +841,6 @@ def status():
         if container_state.get("state") == "running" and not hublink_internet:
             errors["hublink_internet"] = "Hublink container has no internet connectivity"
             timestamps["hublink_internet"] = time.time()
-        
-        # Check Hublink API status if container is running
-        hublink_status = None
-        secret_url = None
-        gateway_name = None
-        if container_state.get("state") == "running":
-            try:
-                response = requests.get(f"http://{HUBLINK_HOST}:{HUBLINK_PORT}/status", timeout=3)
-                if response.status_code in [200, 500]:  # Accept both 200 and 500 as valid responses
-                    hublink_status = response.json()
-                    logger.debug(f"Hublink API connected via {HUBLINK_HOST}:{HUBLINK_PORT}")
-                    # Get secret_url and gateway_name if available
-                    secret_url = hublink_status.get("secret_url")
-                    gateway_name = hublink_status.get("gateway_name")
-                    # Merge any Hublink errors
-                    if hublink_status.get("status") == "error":
-                        errors.update(hublink_status.get("errors", {}))
-                        timestamps.update(hublink_status.get("timestamps", {}))
-                else:
-                    errors["hublink_api"] = f"Hublink API returned status {response.status_code}"
-                    timestamps["hublink_api"] = time.time()
-            except Exception as e:
-                errors["hublink_api"] = f"Failed to connect to Hublink API: {str(e)}"
-                timestamps["hublink_api"] = time.time()
         
         # Check for auto-fix opportunities
         auto_fix_applied = auto_fix_manager.check_and_fix_issues(container_state, errors, app_internet, hublink_internet)
@@ -977,15 +989,8 @@ def toggle_autofix():
         logger.error(f"Error toggling auto-fix: {e}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/internet/check')
-def check_internet():
-    """Check internet connectivity"""
-    logger.debug("Internet connectivity check requested")
-    return jsonify({
-        "app_internet": internet_checker.check_app_internet(),
-        "hublink_internet": internet_checker.check_hublink_internet(),
-        "timestamp": time.time()
-    })
+# Removed /api/internet/check endpoint as it was causing duplicate requests to Hublink /status
+# and is not used by the frontend
 
 @app.errorhandler(404)
 def not_found(error):
@@ -998,12 +1003,14 @@ def internal_error(error):
     return jsonify({"error": "Internal server error"}), 500
 
 if __name__ == '__main__':
+    import os
     logger.info("Starting Hublink Hypervisor")
+    logger.info(f"Process ID: {os.getpid()}")
     logger.info(f"Hublink path: {HUBLINK_PATH}")
     logger.info(f"Compose file: {hublink_manager.compose_file}")
     
     app.run(
         host='0.0.0.0',
         port=8081,
-        debug=True
+        debug=IS_DEVELOPMENT  # Only enable debug mode in development
     ) 

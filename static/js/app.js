@@ -6,7 +6,7 @@
 class HublinkHypervisor {
     constructor() {
         this.autoRefreshInterval = null;
-        this.refreshInterval = 10000; // 10 seconds
+        this.refreshInterval = 15000; // 15 seconds
         this.isLoading = false;
 
         this.initializeElements();
@@ -98,7 +98,11 @@ class HublinkHypervisor {
     }
 
     async loadStatus(showLoading = false) {
-        if (this.isLoading) return;
+        // Prevent duplicate requests
+        if (this.isLoading) {
+            console.log('Status request already in progress, skipping...');
+            return;
+        }
 
         this.isLoading = true;
         if (showLoading) {
@@ -115,6 +119,12 @@ class HublinkHypervisor {
 
             const data = await response.json();
 
+            // Handle offline detection
+            if (window.offlineDetection) {
+                window.offlineDetection.setLastOnlineTime(Date.now());
+                window.offlineDetection.hideOfflineOverlay();
+            }
+
             this.updateUI(data);
             this.updateLastUpdated();
             this.hideOfflineState();
@@ -124,6 +134,12 @@ class HublinkHypervisor {
 
         } catch (error) {
             console.error('Error loading status:', error);
+
+            // Handle offline detection
+            if (window.offlineDetection) {
+                window.offlineDetection.showOfflineOverlay();
+            }
+
             this.showOfflineState();
         } finally {
             this.isLoading = false;
@@ -808,7 +824,12 @@ document.addEventListener('visibilitychange', () => {
         if (document.hidden) {
             window.hublinkHypervisor.stopAutoRefresh();
         } else {
-            window.hublinkHypervisor.startAutoRefresh();
+            // Add a small delay when page becomes visible to prevent rapid successive requests
+            setTimeout(() => {
+                window.hublinkHypervisor.startAutoRefresh();
+                // Load status immediately when page becomes visible
+                window.hublinkHypervisor.loadStatus();
+            }, 1000);
         }
     }
 }); 

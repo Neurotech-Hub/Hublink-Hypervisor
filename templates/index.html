@@ -274,7 +274,6 @@
     <!-- Offline detection script -->
     <script>
         // Offline detection that works even when the server is down
-        let offlineCheckInterval;
         let lastOnlineTime = Date.now();
         let isCurrentlyOffline = false;
         
@@ -314,56 +313,21 @@
             }
         }
         
-        // Check if the server is responding
-        function checkServerHealth() {
-            fetch('/api/status', { 
-                method: 'GET',
-                cache: 'no-cache'
-            })
-            .then(response => {
-                if (response.ok) {
-                    // Server is back online
-                    lastOnlineTime = Date.now();
-                    hideOfflineOverlay();
-                    
-                    // If we were offline, refresh the page to get fresh data
-                    if (isCurrentlyOffline) {
-                        window.location.reload();
-                    }
-                    return true;
-                } else {
-                    throw new Error(`HTTP ${response.status}`);
-                }
-            })
-            .catch(error => {
-                console.log('Server health check failed:', error);
-                showOfflineOverlay();
-                return false;
-            });
-        }
+        // Make these functions globally available for the main app to use
+        window.offlineDetection = {
+            showOfflineOverlay,
+            hideOfflineOverlay,
+            updateOfflineLastCheck,
+            setLastOnlineTime: (time) => { lastOnlineTime = time; },
+            isCurrentlyOffline: () => isCurrentlyOffline
+        };
         
-        // Start offline detection when page loads
-        document.addEventListener('DOMContentLoaded', function() {
-            // Initial check
-            checkServerHealth();
-            
-            // Set up periodic checks every 5 seconds
-            offlineCheckInterval = setInterval(checkServerHealth, 5000);
-            
-            // Update offline timestamp every second when offline
-            setInterval(() => {
-                if (isCurrentlyOffline) {
-                    updateOfflineLastCheck();
-                }
-            }, 1000);
-        });
-        
-        // Clean up on page unload
-        window.addEventListener('beforeunload', function() {
-            if (offlineCheckInterval) {
-                clearInterval(offlineCheckInterval);
+        // Update offline timestamp every second when offline
+        setInterval(() => {
+            if (isCurrentlyOffline) {
+                updateOfflineLastCheck();
             }
-        });
+        }, 1000);
     </script>
 
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
