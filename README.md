@@ -1,6 +1,6 @@
 # Hublink.cloud™ Hypervisor
 
-A clean, minimal Flask web application for monitoring and controlling Hublink Docker containers on Raspberry Pi 5 or development machines.
+A clean, minimal Flask web application for monitoring and controlling Hublink Docker containers on Raspberry Pi 5 or development machines. Features intelligent auto-fix capabilities for common issues and comprehensive system monitoring.
 
 ## Prerequisites
 
@@ -169,6 +169,18 @@ The dashboard displays:
 2. **Internet Connectivity**: Status of both hypervisor and Hublink container internet access
 3. **System Health**: Overall system status with detailed error reporting
 4. **Container Logs**: Real-time logs from the Hublink containers
+5. **Auto-Fix Status**: Intelligent automatic issue resolution with configurable settings
+
+### Auto-Fix Capabilities
+
+The hypervisor includes intelligent auto-fix functionality that automatically detects and resolves common issues:
+
+- **BLE Error Resolution**: Automatically restarts Bluetooth services and containers when BLE errors are detected
+- **Internet Connectivity Fixes**: Resolves network connectivity issues between hypervisor and containers
+- **Generic Error Recovery**: Applies container restart sequences for various error conditions
+- **Configurable Settings**: Auto-fix can be enabled/disabled via API or UI
+- **Smart Timing**: Waits 5 minutes before applying fixes to avoid premature interventions
+- **Environment Awareness**: Different fix strategies for development (macOS) vs production (Raspberry Pi) environments
 
 ## API Endpoints
 
@@ -187,6 +199,7 @@ Returns comprehensive system status including:
 - Internet connectivity
 - Error details
 - Hublink API status
+- Auto-fix status and recent actions
 
 ### Container Management
 ```bash
@@ -202,6 +215,17 @@ GET /api/containers
 GET /api/containers/state
 ```
 Get detailed or simplified container information.
+
+### Auto-Fix Management
+```bash
+GET /api/autofix/status
+```
+Get current auto-fix configuration and status.
+
+```bash
+POST /api/autofix/toggle
+```
+Enable or disable auto-fix functionality.
 
 ### Internet Connectivity
 ```bash
@@ -256,8 +280,9 @@ Hublink-Hypervisor/
 
 1. **HublinkManager**: Handles Docker container operations and status monitoring
 2. **InternetChecker**: Checks internet connectivity for both app and containers
-3. **Frontend**: Clean, responsive UI with real-time updates
-4. **API**: RESTful endpoints for status and control operations
+3. **AutoFixManager**: Intelligent issue detection and automatic resolution
+4. **Frontend**: Clean, responsive UI with real-time updates
+5. **API**: RESTful endpoints for status and control operations
 
 ### Debugging
 
@@ -288,6 +313,7 @@ The application provides detailed error information:
 - Internet connectivity issues
 - Hublink API communication problems
 - System-level errors
+- Auto-fix intervention history and results
 
 ## Container Management
 
