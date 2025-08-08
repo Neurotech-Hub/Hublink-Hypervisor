@@ -31,6 +31,10 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
+# Enable Docker service to start on boot
+echo -e "${YELLOW}Ensuring Docker service starts on boot...${NC}"
+systemctl enable docker
+
 if ! docker info &> /dev/null; then
     echo -e "${RED}Error: Docker is not running or user is not in docker group${NC}"
     exit 1
