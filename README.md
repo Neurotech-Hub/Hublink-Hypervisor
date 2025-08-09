@@ -11,10 +11,10 @@ A clean, minimal Flask web application for monitoring and controlling Hublink Do
 
 ### Quick Installation (Recommended)
 
-For installation on Raspberry Pi 5, download and run the setup script with a single command:
+For installation on Raspberry Pi 5, use the dedicated setup repository:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/Neurotech-Hub/Hublink-Hypervisor/main/setup.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/Neurotech-Hub/Hublink-Hypervisor-Setup/main/setup.sh | sudo bash
 ```
 
 This will:
@@ -126,7 +126,7 @@ The application will be available at `http://localhost:8081` and will start auto
 #### Docker Deployment
 ```bash
 # Start the container
-docker-compose -f docker-compose.hypervisor.yml up -d
+docker-compose up -d
 
 # Check status
 docker ps | grep hublink-hypervisor
@@ -263,10 +263,9 @@ The application logs to both console and file:
 Hublink-Hypervisor/
 ├── app.py                           # Main Flask application
 ├── requirements.txt                 # Python dependencies
-├── setup.sh                        # Docker installation script
 ├── start.sh                        # Development startup script
 ├── Dockerfile                      # Docker container definition
-├── docker-compose.hypervisor.yml   # Docker Compose configuration
+├── docker-compose.yml              # Docker Compose configuration
 ├── templates/
 │   └── index.html                  # Main dashboard template
 └── static/
@@ -326,13 +325,13 @@ If installed via Docker, manage the Hublink Hypervisor container with:
 docker ps | grep hublink-hypervisor
 
 # Start the container
-docker-compose -f /opt/hublink-hypervisor/docker-compose.hypervisor.yml up -d
+cd /opt/hublink-hypervisor && docker-compose up -d
 
 # Stop the container
-docker-compose -f /opt/hublink-hypervisor/docker-compose.hypervisor.yml down
+cd /opt/hublink-hypervisor && docker-compose down
 
 # Restart the container
-docker-compose -f /opt/hublink-hypervisor/docker-compose.hypervisor.yml restart
+cd /opt/hublink-hypervisor && docker-compose restart
 
 # View container logs
 docker logs -f hublink-hypervisor
@@ -358,7 +357,7 @@ To manually update the container:
 docker pull neurotechhub/hublink-hypervisor:latest
 
 # Restart container
-docker-compose -f /opt/hublink-hypervisor/docker-compose.hypervisor.yml up -d
+cd /opt/hublink-hypervisor && docker-compose up -d
 ```
 
 ## Deployment
@@ -367,13 +366,13 @@ docker-compose -f /opt/hublink-hypervisor/docker-compose.hypervisor.yml up -d
 
 1. **Quick Installation** (Recommended):
    ```bash
-   curl -sSL https://raw.githubusercontent.com/Neurotech-Hub/Hublink-Hypervisor/main/setup.sh | sudo bash
+   curl -sSL https://raw.githubusercontent.com/Neurotech-Hub/Hublink-Hypervisor-Setup/main/setup.sh | sudo bash
    ```
 
 2. **Manual Docker Installation**:
    ```bash
    docker pull neurotechhub/hublink-hypervisor:latest
-   # Create docker-compose.hypervisor.yml and run docker-compose up -d
+   # Create docker-compose.yml and run docker-compose up -d
    ```
 
 ### Development Machine (macOS)
@@ -381,7 +380,7 @@ docker-compose -f /opt/hublink-hypervisor/docker-compose.hypervisor.yml up -d
 1. **Docker Deployment**:
    ```bash
    docker pull neurotechhub/hublink-hypervisor:latest
-   # Create docker-compose.hypervisor.yml and run docker-compose up -d
+   # Create docker-compose.yml and run docker-compose up -d
    ```
 
 2. **Local Development**:
