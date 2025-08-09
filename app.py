@@ -192,6 +192,48 @@ last_fix_attempt = None
 # Debug: Track requests to Hublink /status endpoint
 hublink_status_request_count = 0
 
+# Cache for Hublink status to prevent duplicate requests
+hublink_status_cache = {
+    'data': None,
+    'timestamp': 0,
+    'cache_duration': 5  # Cache for 5 seconds
+}
+
+def get_cached_hublink_status():
+    """Get Hublink status from cache or make a new request if cache is expired"""
+    global hublink_status_cache
+    
+    current_time = time.time()
+    
+    # Check if cache is still valid
+    if (hublink_status_cache['data'] is not None and 
+        current_time - hublink_status_cache['timestamp'] < hublink_status_cache['cache_duration']):
+        logger.debug("Using cached Hublink status")
+        return hublink_status_cache['data']
+    
+    # Cache is expired or empty, make a new request
+    try:
+        global hublink_status_request_count
+        hublink_status_request_count += 1
+        logger.info(f"Making request #{hublink_status_request_count} to Hublink /status endpoint")
+        
+        response = requests.get(f"http://{HUBLINK_HOST}:{HUBLINK_PORT}/status", timeout=3)
+        if response.status_code in [200, 500]:  # Accept both 200 and 500 as valid responses
+            hublink_status = response.json()
+            logger.debug(f"Hublink API connected via {HUBLINK_HOST}:{HUBLINK_PORT}")
+            
+            # Cache the result
+            hublink_status_cache['data'] = hublink_status
+            hublink_status_cache['timestamp'] = current_time
+            
+            return hublink_status
+        else:
+            logger.debug(f"Hublink container status check failed with status: {response.status_code}")
+            return None
+    except Exception as e:
+        logger.debug(f"Hublink container status check failed - connection refused: {e}")
+        return None
+
 class AutoFixManager:
     """Manages automatic fixing of container issues"""
     
@@ -745,28 +787,6 @@ class InternetChecker:
         except Exception as e:
             logger.error(f"App internet check failed: {e}")
             return False
-    
-    @staticmethod
-    def check_hublink_internet():
-        """Check if Hublink container has internet connectivity"""
-        try:
-            # Check container on the appropriate port and host
-            try:
-                response = requests.get(f"http://{HUBLINK_HOST}:{HUBLINK_PORT}/status", timeout=3)
-                if response.status_code in [200, 500]:  # Accept both 200 and 500 as valid responses
-                    hublink_status = response.json()
-                    # Return the actual internet_connected status from the container
-                    return hublink_status.get("internet_connected", False)
-                else:
-                    logger.debug(f"Hublink container status check failed with status: {response.status_code}")
-                    return False
-            except requests.exceptions.RequestException:
-                logger.debug("Hublink container status check failed - connection refused")
-                return False
-            
-        except Exception as e:
-            logger.error(f"Hublink container internet check failed: {e}")
-            return False
 
 # Initialize managers
 hublink_manager = HublinkManager()
@@ -804,12 +824,9 @@ def status():
         
         if container_state.get("state") == "running":
             try:
-                global hublink_status_request_count
-                hublink_status_request_count += 1
-                logger.info(f"Making request #{hublink_status_request_count} to Hublink /status endpoint from main /api/status")
-                response = requests.get(f"http://{HUBLINK_HOST}:{HUBLINK_PORT}/status", timeout=3)
-                if response.status_code in [200, 500]:  # Accept both 200 and 500 as valid responses
-                    hublink_status = response.json()
+                # Use cached Hublink status to prevent duplicate requests
+                hublink_status = get_cached_hublink_status()
+                if hublink_status:
                     logger.debug(f"Hublink API connected via {HUBLINK_HOST}:{HUBLINK_PORT}")
                     # Get all the information we need from this single call
                     hublink_internet = hublink_status.get("internet_connected", False)
@@ -820,7 +837,7 @@ def status():
                         errors.update(hublink_status.get("errors", {}))
                         timestamps.update(hublink_status.get("timestamps", {}))
                 else:
-                    errors["hublink_api"] = f"Hublink API returned status {response.status_code}"
+                    errors["hublink_api"] = f"Failed to connect to Hublink API"
                     timestamps["hublink_api"] = time.time()
             except Exception as e:
                 errors["hublink_api"] = f"Failed to connect to Hublink API: {str(e)}"
