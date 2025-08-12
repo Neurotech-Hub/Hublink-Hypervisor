@@ -186,7 +186,7 @@ HUBLINK_HOST = get_hublink_host()
 
 # Global auto-fix state
 auto_fix_enabled = True  # Enable auto-fix by default
-unhealthy_start_time = None
+issue_start_time = None
 last_fix_attempt = None
 
 # Debug: Track requests to Hublink /status endpoint
@@ -246,13 +246,15 @@ class AutoFixManager:
     
     def check_and_fix_issues(self, container_state, container_errors, app_internet, hublink_internet):
         """Check if auto-fix is needed and apply fixes"""
-        global auto_fix_enabled, unhealthy_start_time, last_fix_attempt
+        global auto_fix_enabled, issue_start_time, last_fix_attempt
         
         if not auto_fix_enabled:
             return False
         
-        # Check if container is unhealthy
+        # Check if container is unhealthy OR has application-level errors
         is_unhealthy = False
+        has_application_errors = container_errors and len(container_errors) > 0
+        
         if container_state and container_state.get('state') == 'running':
             containers = container_state.get('containers', [])
             if containers:
@@ -260,22 +262,29 @@ class AutoFixManager:
                 if 'unhealthy' in container.get('status', '').lower():
                     is_unhealthy = True
         
-        if not is_unhealthy:
-            # Container is healthy, reset unhealthy timer
-            unhealthy_start_time = None
+        # Only proceed if container is unhealthy OR has application errors
+        if not is_unhealthy and not has_application_errors:
+            # Container is healthy and no application errors, reset timer
+            issue_start_time = None
             return False
         
-        # Container is unhealthy, start or check timer
+        # Container is unhealthy or has application errors, start or check timer
         current_time = time.time()
-        if unhealthy_start_time is None:
-            unhealthy_start_time = current_time
-            logger.info("Container became unhealthy, starting auto-fix timer")
+        if issue_start_time is None:
+            issue_start_time = current_time
+            if is_unhealthy:
+                logger.info("Container became unhealthy, starting auto-fix timer")
+            else:
+                logger.info("Application errors detected, starting auto-fix timer")
             return False
         
-        # Check if unhealthy for more than 5 minutes
-        unhealthy_duration = current_time - unhealthy_start_time
-        if unhealthy_duration < 300:  # Less than 5 minutes
-            logger.debug(f"Container unhealthy for {unhealthy_duration:.1f}s, waiting for 300s threshold")
+        # Check if issues persist for more than 5 minutes
+        issue_duration = current_time - issue_start_time
+        if issue_duration < 300:  # Less than 5 minutes
+            if is_unhealthy:
+                logger.debug(f"Container unhealthy for {issue_duration:.1f}s, waiting for 300s threshold")
+            else:
+                logger.debug(f"Application errors present for {issue_duration:.1f}s, waiting for 300s threshold")
             return False
         
         # Check if we've already attempted a fix recently (prevent spam)

@@ -307,9 +307,7 @@ class HublinkHypervisor {
                         detailedMessage = `Container health check is failing - the container may have internal issues or be unable to respond to health checks`;
                     }
                 } else if (status.includes('healthy')) {
-                    detailedMessage = `Container is healthy`;
-
-                    // Add specific issues if container is healthy but system has problems
+                    // Container health check is passing, but check for application-level issues
                     if (containerErrors && Object.keys(containerErrors).length > 0) {
                         const errorMessages = [];
                         for (const [category, error] of Object.entries(containerErrors)) {
@@ -324,8 +322,12 @@ class HublinkHypervisor {
                             }
                         }
                         if (errorMessages.length > 0) {
-                            detailedMessage += ` - System issues: ${errorMessages.join(', ')}`;
+                            detailedMessage = `Container running with issues: ${errorMessages.join(', ')}`;
+                        } else {
+                            detailedMessage = `Container is healthy`;
                         }
+                    } else {
+                        detailedMessage = `Container is healthy`;
                     }
                 } else {
                     detailedMessage = `Container status: ${status}`;
