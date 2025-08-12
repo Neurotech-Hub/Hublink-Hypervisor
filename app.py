@@ -370,41 +370,92 @@ class AutoFixManager:
                 logger.info("Waiting for container to fully stop...")
                 time.sleep(10)
                 
-                # Step 2: Stop bluetooth service
-                logger.info("Step 2: Stopping bluetooth service")
-                result = subprocess.run(['sudo', 'systemctl', 'stop', 'bluetooth'], 
-                                      capture_output=True, text=True, timeout=30)
-                if result.returncode != 0:
-                    logger.warning(f"Failed to stop bluetooth service: {result.stderr}")
+                # Step 2: Stop bluetooth service on host via Docker
+                logger.info("Step 2: Stopping bluetooth service on host")
+                try:
+                    result = subprocess.run([
+                        'docker', 'run', '--rm', '--privileged', '--network=host',
+                        '--pid=host', '--volume=/sys:/sys', '--volume=/dev:/dev',
+                        'alpine:latest', 'sh', '-c',
+                        'apk add --no-cache systemctl && systemctl stop bluetooth'
+                    ], capture_output=True, text=True, timeout=30)
+                    
+                    if result.returncode == 0:
+                        logger.info("Successfully stopped bluetooth service")
+                    else:
+                        logger.warning(f"Failed to stop bluetooth service: {result.stderr}")
+                        
+                except Exception as e:
+                    logger.warning(f"Could not stop bluetooth service: {e}")
                 
-                # Step 3: Kill bluetoothd process
-                logger.info("Step 3: Killing bluetoothd process")
-                result = subprocess.run(['sudo', 'pkill', '-9', 'bluetoothd'], 
-                                      capture_output=True, text=True, timeout=30)
-                # pkill returns 1 if no processes found, which is OK
-                if result.returncode not in [0, 1]:
-                    logger.warning(f"Unexpected pkill result: {result.stderr}")
+                # Step 3: Kill bluetoothd process on host
+                logger.info("Step 3: Killing bluetoothd process on host")
+                try:
+                    result = subprocess.run([
+                        'docker', 'run', '--rm', '--privileged', '--network=host',
+                        '--pid=host', 'alpine:latest', 'sh', '-c',
+                        'pkill -9 bluetoothd || true'
+                    ], capture_output=True, text=True, timeout=30)
+                    
+                    if result.returncode in [0, 1]:  # pkill returns 1 if no processes found
+                        logger.info("Successfully killed bluetoothd processes")
+                    else:
+                        logger.warning(f"Unexpected pkill result: {result.stderr}")
+                        
+                except Exception as e:
+                    logger.warning(f"Could not kill bluetoothd processes: {e}")
                 
-                # Step 4: Remove btusb module
-                logger.info("Step 4: Removing btusb module")
-                result = subprocess.run(['sudo', 'modprobe', '-r', 'btusb'], 
-                                      capture_output=True, text=True, timeout=30)
-                if result.returncode != 0:
-                    logger.warning(f"Failed to remove btusb module: {result.stderr}")
+                # Step 4: Remove btusb module on host
+                logger.info("Step 4: Removing btusb module on host")
+                try:
+                    result = subprocess.run([
+                        'docker', 'run', '--rm', '--privileged', '--network=host',
+                        '--volume=/sys:/sys', 'alpine:latest', 'sh', '-c',
+                        'apk add --no-cache kmod && modprobe -r btusb'
+                    ], capture_output=True, text=True, timeout=30)
+                    
+                    if result.returncode == 0:
+                        logger.info("Successfully removed btusb module")
+                    else:
+                        logger.warning(f"Failed to remove btusb module: {result.stderr}")
+                        
+                except Exception as e:
+                    logger.warning(f"Could not remove btusb module: {e}")
                 
-                # Step 5: Reload btusb module
-                logger.info("Step 5: Reloading btusb module")
-                result = subprocess.run(['sudo', 'modprobe', 'btusb'], 
-                                      capture_output=True, text=True, timeout=30)
-                if result.returncode != 0:
-                    logger.warning(f"Failed to reload btusb module: {result.stderr}")
+                # Step 5: Reload btusb module on host
+                logger.info("Step 5: Reloading btusb module on host")
+                try:
+                    result = subprocess.run([
+                        'docker', 'run', '--rm', '--privileged', '--network=host',
+                        '--volume=/sys:/sys', 'alpine:latest', 'sh', '-c',
+                        'apk add --no-cache kmod && modprobe btusb'
+                    ], capture_output=True, text=True, timeout=30)
+                    
+                    if result.returncode == 0:
+                        logger.info("Successfully reloaded btusb module")
+                    else:
+                        logger.warning(f"Failed to reload btusb module: {result.stderr}")
+                        
+                except Exception as e:
+                    logger.warning(f"Could not reload btusb module: {e}")
                 
-                # Step 6: Start bluetooth service
-                logger.info("Step 6: Starting bluetooth service")
-                result = subprocess.run(['sudo', 'systemctl', 'start', 'bluetooth'], 
-                                      capture_output=True, text=True, timeout=30)
-                if result.returncode != 0:
-                    logger.warning(f"Failed to start bluetooth service: {result.stderr}")
+                # Step 6: Start bluetooth service on host
+                logger.info("Step 6: Starting bluetooth service on host")
+                try:
+                    result = subprocess.run([
+                        'docker', 'run', '--rm', '--privileged', '--network=host',
+                        '--pid=host', '--volume=/sys:/sys', '--volume=/dev:/dev',
+                        'alpine:latest', 'sh', '-c',
+                        'apk add --no-cache systemctl && systemctl start bluetooth'
+                    ], capture_output=True, text=True, timeout=30)
+                    
+                    if result.returncode == 0:
+                        logger.info("Successfully started bluetooth service")
+                    else:
+                        logger.warning(f"Failed to start bluetooth service: {result.stderr}")
+                        
+                except Exception as e:
+                    logger.warning(f"Could not start bluetooth service: {e}")
                 
                 # Wait for bluetooth to initialize
                 logger.info("Waiting for bluetooth to initialize...")
@@ -1014,6 +1065,39 @@ def toggle_autofix():
     except Exception as e:
         logger.error(f"Error toggling auto-fix: {e}")
         return jsonify({"error": str(e)}), 500
+
+@app.route('/api/test/ble-error', methods=['POST'])
+def test_ble_error():
+    """Test endpoint to simulate BLE error for testing auto-fix routine"""
+    try:
+        logger.info("BLE error test triggered - simulating BLE error")
+        
+        # Simulate BLE error by creating a mock error response
+        mock_errors = {
+            "ble": "BLE device connectivity issue - TEST SIMULATION"
+        }
+        
+        # Trigger the auto-fix routine with the mock error
+        auto_fix_applied = auto_fix_manager.check_and_fix_issues(
+            container_state={"state": "running", "containers": [{"status": "Up 5 minutes (healthy)"}]},
+            container_errors=mock_errors,
+            app_internet=True,
+            hublink_internet=True
+        )
+        
+        return jsonify({
+            "success": True,
+            "message": "BLE error simulation triggered",
+            "auto_fix_applied": auto_fix_applied,
+            "simulated_errors": mock_errors
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in BLE error test: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
 
 # Removed /api/internet/check endpoint as it was causing duplicate requests to Hublink /status
 # and is not used by the frontend
