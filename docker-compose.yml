@@ -2,12 +2,27 @@ services:
   hublink-hypervisor:
     image: neurotechhub/hublink-hypervisor:latest
     container_name: hublink-hypervisor
+    restart: always
+    privileged: true
     network_mode: host
+    stop_grace_period: 30s
+    stop_signal: SIGTERM
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /opt/hublink:/opt/hublink:ro
+      - /dev:/dev:ro
+      - /run/udev:/run/udev:ro
+      - /media:/media:rshared
+      - /var/run/dbus:/var/run/dbus
+      - /var/run/bluetooth:/var/run/bluetooth
     environment:
       - HUBLINK_PATH=/opt/hublink
-    restart: always
+      - ENVIRONMENT=prod
+      - TZ=UTC
     labels:
       - "com.centurylinklabs.watchtower.enable=true" 

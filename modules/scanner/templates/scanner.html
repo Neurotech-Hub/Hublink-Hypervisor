@@ -1,0 +1,82 @@
+<!-- Scanner Tab Content -->
+<div class="scanner-content">
+    <div class="scanner-header">
+        <h2>Bluetooth Scanner</h2>
+        <p>Scan for and manage Hublink Bluetooth devices</p>
+    </div>
+    
+    <!-- Scanner Controls -->
+    <div class="scanner-controls">
+        <div class="control-group">
+            <button class="btn btn-primary" id="start-scan-btn">
+                <span class="btn-icon">🔍</span>
+                Start Scan
+            </button>
+            <button class="btn btn-secondary" id="stop-scan-btn" disabled>
+                <span class="btn-icon">⏹️</span>
+                Stop Scan
+            </button>
+        </div>
+        <div class="control-group">
+            <button class="btn btn-warning" id="disconnect-all-btn" disabled>
+                <span class="btn-icon">🔌</span>
+                Disconnect All
+            </button>
+        </div>
+    </div>
+    
+    <!-- Scanner Status -->
+    <div class="scanner-status">
+        <div class="status-indicator" id="scanner-status-indicator">
+            <span class="status-dot"></span>
+            <span class="status-text">Ready</span>
+        </div>
+        <div class="status-details">
+            <span class="status-item">
+                <span class="status-label">Scanning:</span>
+                <span class="status-value" id="scanning-status">No</span>
+            </span>
+            <span class="status-item">
+                <span class="status-label">Devices Found:</span>
+                <span class="status-value" id="devices-found">0</span>
+            </span>
+            <span class="status-item">
+                <span class="status-label">Connected:</span>
+                <span class="status-value" id="devices-connected">0</span>
+            </span>
+        </div>
+    </div>
+    
+    <!-- Device List -->
+    <div class="device-list" id="device-list">
+        <div class="device-list-header">
+            <h3>Discovered Devices</h3>
+            <div class="device-list-actions">
+                <button class="btn btn-sm btn-secondary" id="refresh-devices-btn">
+                    <span class="btn-icon">🔄</span>
+                    Refresh
+                </button>
+            </div>
+        </div>
+        <div class="device-list-content" id="device-list-content">
+            <div class="no-devices-message">
+                <span class="no-devices-icon">📱</span>
+                <p>No Hublink devices discovered yet</p>
+                <p class="no-devices-hint">Start scanning to discover nearby devices</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Device Details Modal -->
+    <div class="modal-overlay" id="device-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Device Details</h3>
+                <button class="modal-close" id="device-modal-close">&times;</button>
+            </div>
+            <div class="modal-content" id="device-modal-content">
+                <!-- Device details will be populated here -->
+            </div>
+        </div>
+    </div>
+</div>

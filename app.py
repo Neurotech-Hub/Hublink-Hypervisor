@@ -16,6 +16,14 @@ from flask_cors import CORS
 import logging
 import docker
 
+# Import scanner module
+try:
+    from modules.scanner import scanner_bp
+    SCANNER_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"Scanner module not available: {e}")
+    SCANNER_AVAILABLE = False
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,  # Changed from DEBUG to INFO
@@ -34,6 +42,19 @@ logging.getLogger('docker').setLevel(logging.WARNING)
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for development
+
+# Register scanner blueprint if available
+if SCANNER_AVAILABLE:
+    app.register_blueprint(scanner_bp)
+    logger.info("Scanner module registered successfully")
+else:
+    logger.warning("Scanner module not available - scanner functionality disabled")
+
+# Scanner page route
+@app.route('/scanner')
+def scanner_page():
+    """Standalone scanner page"""
+    return render_template('scanner.html')
 
 # Configuration
 HUBLINK_PATH = '/opt/hublink'
@@ -922,6 +943,15 @@ def status():
         # Check for auto-fix opportunities
         auto_fix_applied = auto_fix_manager.check_and_fix_issues(container_state, errors, app_internet, hublink_internet)
         
+        # Get scanner status if available
+        scanner_status = None
+        if SCANNER_AVAILABLE:
+            try:
+                from modules.scanner.scanner import scanner_instance
+                scanner_status = scanner_instance.get_status()
+            except Exception as e:
+                logger.debug(f"Could not get scanner status: {e}")
+        
         # Determine overall status
         if errors:
             status_response = {
@@ -935,6 +965,7 @@ def status():
                 "secret_url": secret_url,
                 "gateway_name": gateway_name,
                 "auto_fix_applied": auto_fix_applied,
+                "scanner_status": scanner_status,
                 "timestamp": time.time()
             }
         else:
@@ -947,6 +978,7 @@ def status():
                 "secret_url": secret_url,
                 "gateway_name": gateway_name,
                 "auto_fix_applied": auto_fix_applied,
+                "scanner_status": scanner_status,
                 "timestamp": time.time()
             }
         

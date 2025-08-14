@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scanner Device Examples</title>
+    <link rel="stylesheet" href="../static/css/style.css">
+    <style>
+        body { padding: 2rem; background: #f8f9fa; }
+        .example-section { margin-bottom: 3rem; }
+        .example-title { font-size: 1.5rem; font-weight: 600; margin-bottom: 1rem; color: #1a1a1a; }
+        .example-description { color: #6c757d; margin-bottom: 1rem; }
+    </style>
+</head>
+<body>
+    <h1>Scanner Device Examples</h1>
+    <p>This shows what the device listing will look like in different states during development.</p>
+
+    <!-- Example 1: No Devices Found -->
+    <div class="example-section">
+        <div class="example-title">1. No Devices Found</div>
+        <div class="example-description">When scan completes but no Hublink devices are discovered</div>
+        
+        <div class="device-list">
+            <div class="device-list-header">
+                <h3>Discovered Devices</h3>
+            </div>
+            <div class="device-list-content">
+                <div class="no-devices-message">
+                    <span class="no-devices-icon">📱</span>
+                    <p>No Hublink devices discovered</p>
+                    <p class="no-devices-hint">No devices with Hublink service UUID found nearby</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Example 2: Devices Found (Not Connected) -->
+    <div class="example-section">
+        <div class="example-title">2. Devices Found - Not Connected</div>
+        <div class="example-description">When Hublink devices are discovered but not yet connected</div>
+        
+        <div class="device-list">
+            <div class="device-list-header">
+                <h3>Discovered Devices</h3>
+            </div>
+            <div class="device-list-content">
+                <div class="device-item" data-address="AA:BB:CC:DD:EE:FF">
+                    <div class="device-info">
+                        <div class="device-name">Hublink Gateway #1</div>
+                        <div class="device-details">
+                            <span class="device-address">AA:BB:CC:DD:EE:FF</span>
+                            <span>RSSI: -45 dBm</span>
+                            <span class="device-upload-path">Path: /data/uploads</span>
+                        </div>
+                    </div>
+                    <div class="device-actions">
+                        <button class="btn btn-sm btn-primary">
+                            <span class="btn-icon">🔗</span>Connect
+                        </button>
+                        <button class="btn btn-sm btn-secondary">
+                            <span class="btn-icon">ℹ️</span>Details
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="device-item" data-address="11:22:33:44:55:66">
+                    <div class="device-info">
+                        <div class="device-name">Hublink Gateway #2</div>
+                        <div class="device-details">
+                            <span class="device-address">11:22:33:44:55:66</span>
+                            <span>RSSI: -67 dBm</span>
+                            <span class="device-upload-path">Path: /home/hublink/data</span>
+                        </div>
+                    </div>
+                    <div class="device-actions">
+                        <button class="btn btn-sm btn-primary">
+                            <span class="btn-icon">🔗</span>Connect
+                        </button>
+                        <button class="btn btn-sm btn-secondary">
+                            <span class="btn-icon">ℹ️</span>Details
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Example 3: Connected Device -->
+    <div class="example-section">
+        <div class="example-title">3. Connected Device</div>
+        <div class="example-description">When a device is successfully connected (green background)</div>
+        
+        <div class="device-list">
+            <div class="device-list-header">
+                <h3>Discovered Devices</h3>
+            </div>
+            <div class="device-list-content">
+                <div class="device-item connected" data-address="AA:BB:CC:DD:EE:FF">
+                    <div class="device-info">
+                        <div class="device-name">Hublink Gateway #1</div>
+                        <div class="device-details">
+                            <span class="device-address">AA:BB:CC:DD:EE:FF</span>
+                            <span>RSSI: -45 dBm</span>
+                            <span class="device-upload-path">Path: /data/uploads</span>
+                        </div>
+                    </div>
+                    <div class="device-actions">
+                        <button class="btn btn-sm btn-warning">
+                            <span class="btn-icon">🔌</span>Disconnect
+                        </button>
+                        <button class="btn btn-sm btn-secondary">
+                            <span class="btn-icon">ℹ️</span>Details
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="device-item" data-address="11:22:33:44:55:66">
+                    <div class="device-info">
+                        <div class="device-name">Hublink Gateway #2</div>
+                        <div class="device-details">
+                            <span class="device-address">11:22:33:44:55:66</span>
+                            <span>RSSI: -67 dBm</span>
+                            <span class="device-upload-path">Path: /home/hublink/data</span>
+                        </div>
+                    </div>
+                    <div class="device-actions">
+                        <button class="btn btn-sm btn-primary">
+                            <span class="btn-icon">🔗</span>Connect
+                        </button>
+                        <button class="btn btn-sm btn-secondary">
+                            <span class="btn-icon">ℹ️</span>Details
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Example 4: Device Details Modal -->
+    <div class="example-section">
+        <div class="example-title">4. Device Details Modal</div>
+        <div class="example-description">When clicking the Details button on a device</div>
+        
+        <div class="modal-overlay" style="display: flex;">
+            <div class="modal">
+                <div class="modal-header">
+                    <h3>Device Details</h3>
+                    <button class="modal-close">&times;</button>
+                </div>
+                <div class="modal-content">
+                    <div class="device-details-modal">
+                        <h4>Hublink Gateway #1</h4>
+                        <div class="detail-row">
+                            <strong>Address:</strong> <code>AA:BB:CC:DD:EE:FF</code>
+                        </div>
+                        <div class="detail-row">
+                            <strong>RSSI:</strong> -45 dBm
+                        </div>
+                        <div class="detail-row">
+                            <strong>Upload Path:</strong> /data/uploads
+                        </div>
+                        <div class="detail-row">
+                            <strong>Status:</strong> <span class="status-badge connected">connected</span>
+                        </div>
+                        <div class="detail-row">
+                            <strong>Discovered:</strong> 8/14/2025, 2:39:45 PM
+                        </div>
+                        <div class="detail-row">
+                            <strong>Connected:</strong> 8/14/2025, 2:40:12 PM
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Example 5: Scanning State -->
+    <div class="example-section">
+        <div class="example-title">5. Scanning State</div>
+        <div class="example-description">During the 10-second scan (button shows "Scanning...")</div>
+        
+        <div class="scanner-controls">
+            <button class="btn btn-primary btn-large" disabled>
+                <span class="btn-icon">⏳</span>Scanning...
+            </button>
+        </div>
+        
+        <div class="scanner-status">
+            <div class="status-indicator">
+                <span class="status-dot scanning"></span>
+                <span class="status-text">Scanning for Hublink devices...</span>
+            </div>
+            <div class="status-details">
+                <span class="status-item">
+                    <span class="status-label">Scanning:</span>
+                    <span class="status-value">Yes</span>
+                </span>
+                <span class="status-item">
+                    <span class="status-label">Devices Found:</span>
+                    <span class="status-value">2</span>
+                </span>
+                <span class="status-item">
+                    <span class="status-label">Connected:</span>
+                    <span class="status-value">0</span>
+                </span>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>

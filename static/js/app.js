@@ -33,9 +33,7 @@ class HublinkHypervisor {
             statusDot: document.querySelector('#overall-status .status-dot'),
             statusText: document.querySelector('#overall-status .status-text'),
 
-            // Navigation elements
-            navTabs: document.querySelectorAll('.header-nav .nav-tab'),
-            tabContents: document.querySelectorAll('.tab-content'),
+
 
             // Footer elements
             lastUpdated: document.getElementById('last-updated'),
@@ -82,12 +80,7 @@ class HublinkHypervisor {
 
 
 
-        // Navigation events
-        this.elements.navTabs.forEach(tab => {
-            tab.addEventListener('click', () => {
-                this.switchTab(tab.dataset.tab);
-            });
-        });
+
 
         // Keyboard events
         document.addEventListener('keydown', (e) => {
@@ -542,7 +535,7 @@ class HublinkHypervisor {
     }
 
     async stopContainers() {
-        await this.performContainerAction('stop', 'Stopping containers... This may take a few minutes.');
+        await this.performContainerAction('stop', 'Stopping Hublink services... This may take a few minutes.');
     }
 
     async restartContainers() {
@@ -790,27 +783,14 @@ class HublinkHypervisor {
         }
     }
 
-    switchTab(tabName) {
-        // Remove active class from all tabs and contents
-        this.elements.navTabs.forEach(tab => {
-            tab.classList.remove('active');
-        });
-        this.elements.tabContents.forEach(content => {
-            content.classList.remove('active');
-        });
-
-        // Add active class to selected tab and content
-        const selectedTab = document.querySelector(`[data-tab="${tabName}"]`);
-        const selectedContent = document.getElementById(`${tabName}-tab`);
-
-        if (selectedTab && selectedContent) {
-            selectedTab.classList.add('active');
-            selectedContent.classList.add('active');
-        }
-    }
-
     capitalizeFirst(str) {
         return str.charAt(0).toUpperCase() + str.slice(1).replace(/_/g, ' ');
+    }
+
+    showNotification(message, type = 'info') {
+        // Simple notification system - could be enhanced with a proper toast library
+        console.log(`${type.toUpperCase()}: ${message}`);
+        // You could implement a proper notification system here
     }
 }
 

@@ -6,8 +6,8 @@
             </h1>
         </div>
         <nav class="header-nav">
-            <button class="nav-tab active" data-tab="dashboard">Dashboard</button>
-            <button class="nav-tab" data-tab="scanner">Scanner</button>
+            <a href="/" class="nav-tab {% if request.endpoint == 'index' %}active{% endif %}">Dashboard</a>
+            <a href="/scanner" class="nav-tab {% if request.endpoint == 'scanner_page' %}active{% endif %}">Scanner</a>
         </nav>
     </div>
 </header> 

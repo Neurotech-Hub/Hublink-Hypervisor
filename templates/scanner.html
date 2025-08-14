@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hublink Hypervisor - Scanner</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        {% include 'partials/header.html' %}
+        
+            <!-- Main Content -->
+    <main class="main-content">
+        <div class="scanner-content">
+            <div class="scanner-page-content">
+            <div class="scanner-header">
+                <h2>Bluetooth Scanner</h2>
+            </div>
+            
+            <!-- Scanner Controls -->
+            <div class="scanner-controls">
+                <div class="filter-input-group">
+                    <label for="device-name-filter">Device Name Filter:</label>
+                    <input 
+                        type="text" 
+                        id="device-name-filter" 
+                        placeholder="Enter device name filter (e.g., 'Hublink', 'ESP32', etc.)"
+                        value="Hublink"
+                    >
+                </div>
+                <button class="btn btn-primary btn-large" id="start-scan-btn">
+                    Start Scan
+                </button>
+            </div>
+            
+
+            
+            <!-- Device List -->
+            <div class="device-list" id="device-list">
+                <div class="device-list-header">
+                    <h3>Discovered Devices</h3>
+                </div>
+                <div class="device-list-content" id="device-list-content">
+                    <div class="no-devices-message">
+                        <p>No Hublink devices discovered yet</p>
+                        <p class="no-devices-hint">Start scanning to discover nearby devices</p>
+                    </div>
+                </div>
+            </div>
+            
+
+            
+            <!-- Device Details Modal -->
+            <div class="modal-overlay" id="device-modal">
+                <div class="modal">
+                    <div class="modal-header">
+                        <h3>Device Details</h3>
+                        <button class="modal-close" id="device-modal-close">&times;</button>
+                    </div>
+                    <div class="modal-content" id="device-modal-content">
+                        <!-- Device details will be populated here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+        </main>
+        
+        <!-- Footer -->
+        {% include 'partials/footer.html' %}
+    </div>
+    
+    <!-- JavaScript -->
+    <script src="{{ url_for('static', filename='js/scanner.js') }}"></script>
+</body>
+</html>
