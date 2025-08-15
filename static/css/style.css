@@ -1341,6 +1341,259 @@ body {
     border-radius: 25px;
 }
 
+/* Predefined Commands Grid */
+.device-predefined-commands {
+    margin-bottom: 2rem;
+}
+
+.device-predefined-commands h4 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #1a1a1a;
+    margin-bottom: 1rem;
+}
+
+.command-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.command-grid-btn {
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-height: 3rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.command-grid-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* Responsive command grid */
+@media (max-width: 768px) {
+    .command-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.5rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .command-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Commands Status Section */
+.commands-status-section {
+    background: #ffffff;
+    border: 1px solid #e1e5e9;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    margin-bottom: 2rem;
+    overflow: hidden;
+}
+
+.commands-status-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+    border-bottom: 1px solid #e1e5e9;
+    background: #f8f9fa;
+}
+
+.commands-status-header h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #1a1a1a;
+    margin: 0;
+}
+
+.commands-status-content {
+    padding: 1.5rem;
+}
+
+.commands-status-loading {
+    color: #6c757d;
+    font-style: italic;
+    text-align: center;
+    padding: 1rem;
+}
+
+.commands-status-success {
+    color: #155724;
+}
+
+.commands-status-info {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.commands-status-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.commands-status-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.commands-status-value {
+    font-size: 0.875rem;
+    color: #1a1a1a;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+.commands-list {
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 6px;
+    border: 1px solid #e9ecef;
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+.commands-status-warning {
+    color: #856404;
+    text-align: center;
+}
+
+.commands-status-message {
+    font-size: 1rem;
+    margin-bottom: 1rem;
+}
+
+.commands-status-hint {
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: #6c757d;
+}
+
+.commands-status-hint code {
+    background: #f8f9fa;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    color: #e83e8c;
+    border: 1px solid #e9ecef;
+}
+
+/* Responsive commands status */
+@media (max-width: 768px) {
+    .commands-status-header {
+        flex-direction: column;
+        gap: 1rem;
+        align-items: flex-start;
+    }
+
+    .commands-status-info {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* BLE Terminal Section */
+.ble-terminal-section {
+    background: #ffffff;
+    border: 1px solid #e1e5e9;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    margin-top: 2rem;
+    margin-bottom: 2rem;
+    overflow: hidden;
+}
+
+.ble-terminal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid #e1e5e9;
+    background: #f8f9fa;
+}
+
+.ble-terminal-header h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #1a1a1a;
+    margin: 0;
+}
+
+.btn-small {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 4px;
+}
+
+.ble-terminal {
+    background: #1a1a1a;
+    color: #00ff00;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.8rem;
+    line-height: 1.4;
+    padding: 1rem;
+    max-height: 300px;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.terminal-line {
+    margin-bottom: 0.25rem;
+    word-wrap: break-word;
+    white-space: pre-wrap;
+}
+
+.terminal-line.error {
+    color: #ff6b6b;
+}
+
+.terminal-line.success {
+    color: #51cf66;
+}
+
+.terminal-line.warning {
+    color: #ffd43b;
+}
+
+.terminal-line.info {
+    color: #74c0fc;
+}
+
+.terminal-timestamp {
+    color: #888;
+    font-size: 0.75rem;
+}
+
+/* Responsive terminal */
+@media (max-width: 768px) {
+    .ble-terminal-header {
+        flex-direction: column;
+        gap: 0.5rem;
+        align-items: flex-start;
+    }
+
+    .ble-terminal {
+        font-size: 0.75rem;
+        max-height: 200px;
+    }
+}
+
 .device-info {
     flex: 1;
 }

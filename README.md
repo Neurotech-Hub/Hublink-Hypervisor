@@ -76,8 +76,9 @@ Hublink-Hypervisor/
 1. **HublinkManager**: Handles Docker container operations and status monitoring
 2. **InternetChecker**: Checks internet connectivity for both app and containers
 3. **AutoFixManager**: Intelligent issue detection and automatic resolution
-4. **Frontend**: Clean, responsive UI with real-time updates
-5. **API**: RESTful endpoints for status and control operations
+4. **BluetoothScanner**: Bluetooth Low Energy device discovery and management
+5. **Frontend**: Clean, responsive UI with real-time updates
+6. **API**: RESTful endpoints for status and control operations
 
 ## API Endpoints
 
@@ -130,6 +131,20 @@ GET /api/logs
 ```
 Get recent container logs.
 
+### Bluetooth Scanner
+```bash
+GET /api/scanner/status
+GET /api/scanner/devices
+GET /api/scanner/commands
+POST /api/scanner/start
+POST /api/scanner/stop
+POST /api/scanner/connect/<address>
+POST /api/scanner/disconnect/<address>
+POST /api/scanner/read-node/<address>
+POST /api/scanner/write-gateway/<address>
+```
+Bluetooth Low Energy device scanning, connection, and communication.
+
 ## Configuration
 
 ### Environment Variables
@@ -139,6 +154,52 @@ The application uses the following default configuration:
 - `HUBLINK_PATH`: `/opt/hublink` (path to Hublink containers)
 - `DOCKER_COMPOSE_FILE`: `docker-compose.yml` (standard compose file)
 - `DOCKER_COMPOSE_MAC_FILE`: `docker-compose.macos.yml` (macOS compose file)
+
+### Bluetooth Commands Configuration
+
+The Bluetooth scanner supports predefined commands loaded from a configuration file:
+
+**File Location**: `/media/{raspberry-pi-user}/HUBLINK/bluetooth_commands.json`
+
+**File Format**:
+```json
+{
+  "sendFiles": {
+    "sendFiles": true
+  },
+  "timestamp": {
+    "timestamp": "%TIMESTAMP%"
+  },
+  "getStatus": {
+    "getStatus": true
+  },
+  "restartSensor": {
+    "restart": "sensor"
+  },
+  "syncTime": {
+    "timestamp": "%TIMESTAMP%",
+    "sendFilenames": true,
+    "watchdogTimeoutMs": 10000
+  }
+}
+```
+
+**Template Variables**:
+- `%TIMESTAMP%`: Replaced with current local Unix timestamp
+
+**Format Features**:
+- ✅ **Clean JSON objects** - No escaping needed, write native JSON
+- ✅ **Template variables** - Use `%TIMESTAMP%` in any string value
+- ✅ **Nested structures** - Support for complex command objects
+- ✅ **IDE friendly** - Full syntax highlighting and validation
+- ✅ **Readable & maintainable** - Clear structure for complex commands
+
+**Features**:
+- **Automatic Detection**: File is loaded at application startup
+- **Quick Commands**: Commands appear as buttons in a 4-column grid when connected to a device
+- **Template Processing**: Variables like `%TIMESTAMP%` are automatically replaced
+- **Responsive Design**: Grid adapts to 2 columns on tablets, 1 column on phones
+- **Hover Tooltips**: Full command shown on button hover
 
 ### Logging
 

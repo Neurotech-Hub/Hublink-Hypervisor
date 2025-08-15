@@ -34,6 +34,19 @@
                     Start Scan
                 </button>
             </div>
+
+            <!-- Commands Status Section -->
+            <div class="commands-status-section">
+                <div class="commands-status-header">
+                    <h3>Bluetooth Commands</h3>
+                    <button class="btn btn-secondary btn-rounded" id="refresh-commands-btn">
+                        Refresh Commands
+                    </button>
+                </div>
+                <div class="commands-status-content" id="commands-status-content">
+                    <div class="commands-status-loading">Loading commands status...</div>
+                </div>
+            </div>
             
 
             
@@ -49,7 +62,17 @@
                     </div>
                 </div>
             </div>
-            
+
+            <!-- BLE Terminal Section -->
+            <div class="ble-terminal-section">
+                <div class="ble-terminal-header">
+                    <h3>BLE Activity Log</h3>
+                    <button class="btn btn-secondary btn-small" id="clear-terminal-btn">Clear</button>
+                </div>
+                <div class="ble-terminal" id="ble-terminal">
+                    <div class="terminal-line">Ready to monitor BLE activity...</div>
+                </div>
+            </div>
 
             
             <!-- Device Details Modal -->

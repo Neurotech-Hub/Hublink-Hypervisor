@@ -8,6 +8,7 @@ class HublinkScanner {
         this.elements = {};
         this.isInitialized = false;
         this.connectionMonitorInterval = null;
+        this.predefinedCommands = {};
         this.init();
     }
 
@@ -35,6 +36,14 @@ class HublinkScanner {
         // Filter input
         this.elements.deviceNameFilter = document.getElementById('device-name-filter');
 
+        // Commands status elements
+        this.elements.refreshCommandsBtn = document.getElementById('refresh-commands-btn');
+        this.elements.commandsStatusContent = document.getElementById('commands-status-content');
+
+        // BLE Terminal elements
+        this.elements.bleTerminal = document.getElementById('ble-terminal');
+        this.elements.clearTerminalBtn = document.getElementById('clear-terminal-btn');
+
 
 
         // Modal elements
@@ -46,6 +55,12 @@ class HublinkScanner {
     bindEvents() {
         // Scanner control buttons
         this.elements.startScanBtn?.addEventListener('click', () => this.startScanner());
+
+        // Commands control buttons
+        this.elements.refreshCommandsBtn?.addEventListener('click', () => this.refreshCommands());
+
+        // Terminal control buttons
+        this.elements.clearTerminalBtn?.addEventListener('click', () => this.clearTerminal());
 
 
 
@@ -60,6 +75,8 @@ class HublinkScanner {
 
     async loadInitialState() {
         try {
+            await this.loadPredefinedCommands();
+            await this.loadCommandsStatus();
             await this.refreshDevices();
             this.startConnectionMonitoring();
         } catch (error) {
@@ -67,8 +84,125 @@ class HublinkScanner {
         }
     }
 
+    async loadPredefinedCommands() {
+        try {
+            const response = await fetch('/api/scanner/commands');
+            const result = await response.json();
+
+            if (result.success) {
+                this.predefinedCommands = result.commands;
+                console.log(`Loaded ${Object.keys(this.predefinedCommands).length} predefined commands:`, Object.keys(this.predefinedCommands));
+            } else {
+                console.warn('Failed to load predefined commands:', result.error);
+            }
+        } catch (error) {
+            console.error('Error loading predefined commands:', error);
+        }
+    }
+
+    async loadCommandsStatus() {
+        try {
+            const response = await fetch('/api/scanner/commands/status');
+            const result = await response.json();
+
+            if (result.success) {
+                this.updateCommandsStatus(result.status);
+            } else {
+                this.updateCommandsStatus({
+                    file_found: false,
+                    message: result.error || 'Failed to load commands status'
+                });
+            }
+        } catch (error) {
+            console.error('Error loading commands status:', error);
+            this.updateCommandsStatus({
+                file_found: false,
+                message: 'Error loading commands status'
+            });
+        }
+    }
+
+    async refreshCommands() {
+        try {
+            if (this.elements.refreshCommandsBtn) {
+                this.elements.refreshCommandsBtn.disabled = true;
+                this.elements.refreshCommandsBtn.textContent = 'Refreshing...';
+            }
+
+            const response = await fetch('/api/scanner/commands/reload', { method: 'POST' });
+            const result = await response.json();
+
+            if (result.success) {
+                // Reload the commands and status
+                await this.loadPredefinedCommands();
+                await this.loadCommandsStatus();
+
+                const message = result.old_count !== result.new_count ?
+                    `Commands updated: ${result.old_count} → ${result.new_count}` :
+                    `Commands reloaded: ${result.new_count} commands`;
+
+                this.showNotification(message, 'success');
+
+                // Refresh any connected device UI to show new commands
+                await this.refreshDevices();
+            } else {
+                this.showNotification(`Failed to refresh commands: ${result.error}`, 'error');
+            }
+        } catch (error) {
+            console.error('Error refreshing commands:', error);
+            this.showNotification('Error refreshing commands', 'error');
+        } finally {
+            if (this.elements.refreshCommandsBtn) {
+                this.elements.refreshCommandsBtn.disabled = false;
+                this.elements.refreshCommandsBtn.textContent = 'Refresh Commands';
+            }
+        }
+    }
+
+    updateCommandsStatus(status) {
+        if (!this.elements.commandsStatusContent) return;
+
+        let statusHtml;
+        if (status.file_found) {
+            const commandsList = status.commands_list && status.commands_list.length > 0 ?
+                status.commands_list.join(', ') : 'None';
+
+            statusHtml = `
+                <div class="commands-status-success">
+                    <div class="commands-status-info">
+                        <div class="commands-status-item">
+                            <span class="commands-status-label">File:</span>
+                            <span class="commands-status-value">${this.escapeHtml(status.file_path || 'Unknown')}</span>
+                        </div>
+                        <div class="commands-status-item">
+                            <span class="commands-status-label">Last Modified:</span>
+                            <span class="commands-status-value">${status.last_modified || 'Unknown'}</span>
+                        </div>
+                    </div>
+                    <div class="commands-list">
+                        <strong>Available Commands:</strong> ${this.escapeHtml(commandsList)}
+                    </div>
+                </div>
+            `;
+        } else {
+            statusHtml = `
+                <div class="commands-status-warning">
+                    <div class="commands-status-message">
+                        <strong>No Commands File Found</strong>
+                    </div>
+                    <div class="commands-status-hint">
+                        Place <code>bluetooth_commands.json</code> in <code>/media/{user}/HUBLINK/</code> 
+                        and click "Refresh Commands" to load quick command buttons.
+                    </div>
+                </div>
+            `;
+        }
+
+        this.elements.commandsStatusContent.innerHTML = statusHtml;
+    }
+
     startConnectionMonitoring() {
-        // Monitor connection status every 5 seconds
+        // Monitor connection status more frequently (every 1 second) for real-time indication updates
         if (this.connectionMonitorInterval) {
             clearInterval(this.connectionMonitorInterval);
         }
@@ -76,12 +210,13 @@ class HublinkScanner {
         this.connectionMonitorInterval = setInterval(async () => {
             try {
                 await this.refreshDevices();
+                await this.refreshBleActivity(); // Also refresh BLE activity
             } catch (error) {
                 console.error('Error during connection monitoring:', error);
             }
-        }, 5000);
+        }, 1000); // 1 second for real-time indication updates
 
-        console.log('Connection monitoring started');
+        console.log('Connection monitoring started (1 second intervals for real-time updates)');
     }
 
     stopConnectionMonitoring() {
@@ -96,6 +231,7 @@ class HublinkScanner {
         try {
             this.setLoading(true);
             this.updateStatus('Starting scan...', 'scanning');
+            this.logBleActivity('Starting BLE scan...', 'info');
 
             // Clear the discovered devices list immediately
             if (this.elements.deviceListContent) {
@@ -409,6 +545,31 @@ class HublinkScanner {
             return;
         }
 
+        await this.sendCommand(address, command);
+        commandInput.value = ''; // Clear the input
+    }
+
+    async sendPredefinedCommand(address, command) {
+        await this.sendCommand(address, command);
+    }
+
+    async sendPredefinedCommandByName(address, commandName) {
+        try {
+            if (this.predefinedCommands[commandName]) {
+                const command = this.predefinedCommands[commandName];
+                console.log(`Sending predefined command "${commandName}":`, command);
+                await this.sendCommand(address, command);
+            } else {
+                console.error(`Command "${commandName}" not found in predefined commands`);
+                this.showNotification(`Command "${commandName}" not found`, 'error');
+            }
+        } catch (error) {
+            console.error('Error sending predefined command by name:', error);
+            this.showNotification('Error sending predefined command', 'error');
+        }
+    }
+
+    async sendCommand(address, command) {
         try {
             const response = await fetch(`/api/scanner/write-gateway/${address}`, {
                 method: 'POST',
@@ -422,9 +583,15 @@ class HublinkScanner {
 
             if (result.success) {
                 this.showNotification('Command sent successfully', 'success');
-                commandInput.value = ''; // Clear the input
+                this.logBleActivity(`Command sent to ${address}: ${command}`, 'success');
+
+                // Immediately refresh devices to show any indication responses
+                setTimeout(async () => {
+                    await this.refreshDevices();
+                }, 500); // Small delay to allow device to respond
             } else {
                 this.showNotification(`Failed to send command: ${result.error}`, 'error');
+                this.logBleActivity(`Command failed: ${result.error}`, 'error');
             }
         } catch (error) {
             console.error('Error writing gateway command:', error);
@@ -452,6 +619,33 @@ class HublinkScanner {
             `;
         }
 
+        // Create predefined command buttons grid
+        let commandButtonsContent = '';
+        if (Object.keys(this.predefinedCommands).length > 0) {
+            const commandButtons = Object.entries(this.predefinedCommands).map(([name, command]) => {
+                return `
+                    <button 
+                        class="btn btn-secondary btn-rounded command-grid-btn" 
+                        data-device-address="${device.address}"
+                        data-command-name="${this.escapeHtml(name)}"
+                        onclick="window.hublinkScanner.sendPredefinedCommandByName('${device.address}', '${this.escapeHtml(name)}')"
+                        title="${this.escapeHtml(command)}"
+                    >
+                        ${this.escapeHtml(name)}
+                    </button>
+                `;
+            }).join('');
+
+            commandButtonsContent = `
+                <div class="device-predefined-commands">
+                    <h4>Quick Commands</h4>
+                    <div class="command-grid">
+                        ${commandButtons}
+                    </div>
+                </div>
+            `;
+        }
+
         return `
             <div class="device-expanded-content">
                 <div class="device-node-data">
@@ -460,8 +654,9 @@ class HublinkScanner {
                         ${nodeDataContent}
                     </div>
                 </div>
+                ${commandButtonsContent}
                 <div class="device-gateway-command">
-                    <h4>Gateway Commands</h4>
+                    <h4>Custom Commands</h4>
                     <div class="command-input-group">
                         <textarea 
                             class="command-input" 
@@ -539,6 +734,65 @@ class HublinkScanner {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    // BLE Terminal Methods
+    addTerminalLine(message, type = 'info') {
+        if (!this.elements.bleTerminal) return;
+
+        const timestamp = new Date().toLocaleTimeString();
+        const line = document.createElement('div');
+        line.className = `terminal-line ${type}`;
+        line.innerHTML = `<span class="terminal-timestamp">[${timestamp}]</span> ${this.escapeHtml(message)}`;
+
+        this.elements.bleTerminal.appendChild(line);
+
+        // Auto-scroll to bottom
+        this.elements.bleTerminal.scrollTop = this.elements.bleTerminal.scrollHeight;
+
+        // Limit terminal to 100 lines
+        const lines = this.elements.bleTerminal.querySelectorAll('.terminal-line');
+        if (lines.length > 100) {
+            lines[0].remove();
+        }
+    }
+
+    clearTerminal() {
+        if (!this.elements.bleTerminal) return;
+        this.elements.bleTerminal.innerHTML = '<div class="terminal-line">Terminal cleared...</div>';
+    }
+
+    logBleActivity(activity, type = 'info') {
+        this.addTerminalLine(activity, type);
+        console.log(`[BLE] ${activity}`);
+    }
+
+    async refreshBleActivity() {
+        try {
+            const response = await fetch('/api/scanner/activity');
+            const result = await response.json();
+
+            if (result.success && result.activity) {
+                // Only show new activity items (simple check by length)
+                const currentLines = this.elements.bleTerminal?.querySelectorAll('.terminal-line').length || 0;
+                const newActivities = result.activity.slice(Math.max(0, currentLines - 1));
+
+                newActivities.forEach(activity => {
+                    const timestamp = new Date(activity.timestamp).toLocaleTimeString();
+                    const deviceInfo = activity.device_address ? ` [${activity.device_address.slice(-4)}]` : '';
+                    const message = `${activity.message}${deviceInfo}`;
+
+                    // Don't re-add if it's already the last line
+                    const lastLine = this.elements.bleTerminal?.lastElementChild?.textContent || '';
+                    if (!lastLine.includes(activity.message)) {
+                        this.addTerminalLine(message, activity.type);
+                    }
+                });
+            }
+        } catch (error) {
+            // Silent fail for activity refresh to avoid spam
+            console.debug('Error refreshing BLE activity:', error);
+        }
     }
 }
 

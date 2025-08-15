@@ -362,3 +362,64 @@ def write_gateway_command(address):
             "success": False,
             "error": str(e)
         }), 500
+
+@scanner_bp.route('/commands', methods=['GET'])
+def get_predefined_commands():
+    """Get predefined commands for connected devices"""
+    try:
+        commands = scanner_instance.get_predefined_commands()
+        return jsonify({
+            "success": True,
+            "commands": commands
+        })
+    except Exception as e:
+        logger.error(f"Error getting predefined commands: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+@scanner_bp.route('/commands/status', methods=['GET'])
+def get_commands_file_status():
+    """Get status information about the bluetooth commands file"""
+    try:
+        status = scanner_instance.get_commands_file_status()
+        return jsonify({
+            "success": True,
+            "status": status
+        })
+    except Exception as e:
+        logger.error(f"Error getting commands file status: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+@scanner_bp.route('/commands/reload', methods=['POST'])
+def reload_commands():
+    """Reload predefined commands from file"""
+    try:
+        result = scanner_instance.reload_predefined_commands()
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Error reloading commands: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+@scanner_bp.route('/activity', methods=['GET'])
+def get_ble_activity():
+    """Get recent BLE activity for terminal display"""
+    try:
+        activity = scanner_instance.get_recent_activity()
+        return jsonify({
+            "success": True,
+            "activity": activity
+        })
+    except Exception as e:
+        logger.error(f"Error getting BLE activity: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500

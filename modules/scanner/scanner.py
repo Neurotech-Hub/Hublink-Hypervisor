@@ -7,8 +7,11 @@ import asyncio
 import json
 import logging
 import warnings
+import os
+import glob
+import time
 from typing import Dict, List, Optional, Callable
-from datetime import datetime
+from datetime import datetime, UTC
 from bleak import BleakScanner, BleakClient, BleakError
 from bleak.backends.device import BLEDevice
 from bleak.backends.scanner import AdvertisementData
@@ -34,6 +37,11 @@ class BluetoothScanner:
         self.scan_start_time: Optional[datetime] = None
         self._status_callback: Optional[Callable] = None
         self.device_name_filter: str = "Hublink"  # Default filter
+        self.predefined_commands: Dict[str, str] = {}  # Loaded from bluetooth_commands.json
+        self.recent_activity: List[Dict] = []  # Store recent BLE activity for terminal display
+        
+        # Load predefined commands on initialization
+        self._load_predefined_commands()
         
         logger.info("BluetoothScanner initialized")
     
@@ -73,6 +81,174 @@ class BluetoothScanner:
                 
         except Exception as e:
             logger.error(f"Error in disconnection callback: {e}")
+    
+    def _load_predefined_commands(self):
+        """Load predefined commands from bluetooth_commands.json file"""
+        try:
+            # Look for bluetooth_commands.json in /media/*/HUBLINK/
+            pattern = "/media/*/HUBLINK/bluetooth_commands.json"
+            matching_files = glob.glob(pattern)
+            
+            if not matching_files:
+                logger.info("No bluetooth_commands.json file found in /media/*/HUBLINK/")
+                return
+            
+            # Use the first matching file
+            commands_file = matching_files[0]
+            logger.info(f"Loading predefined commands from: {commands_file}")
+            
+            with open(commands_file, 'r') as f:
+                commands_data = json.load(f)
+            
+            if not isinstance(commands_data, dict):
+                logger.warning("bluetooth_commands.json should contain a JSON object")
+                return
+            
+            self.predefined_commands = commands_data
+            logger.info(f"Loaded {len(self.predefined_commands)} predefined commands: {list(self.predefined_commands.keys())}")
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON in bluetooth_commands.json: {e}")
+        except Exception as e:
+            logger.error(f"Error loading predefined commands: {e}")
+    
+    def _process_command_template(self, command_data) -> str:
+        """Process template variables in command data and return JSON string"""
+        try:
+            if isinstance(command_data, dict):
+                # Process object templates and convert to JSON
+                processed_obj = self._process_object_templates(command_data)
+                return json.dumps(processed_obj, separators=(',', ':'))  # Compact JSON
+            else:
+                logger.warning(f"Command data must be a JSON object, got: {type(command_data)}")
+                return json.dumps({"error": "Invalid command format"})
+            
+        except Exception as e:
+            logger.error(f"Error processing command template: {e}")
+            return json.dumps({"error": str(e)})
+    
+    def _process_object_templates(self, obj):
+        """Recursively process template variables in a dictionary/list"""
+        if isinstance(obj, dict):
+            processed = {}
+            for key, value in obj.items():
+                processed[key] = self._process_object_templates(value)
+            return processed
+        
+        elif isinstance(obj, list):
+            return [self._process_object_templates(item) for item in obj]
+        
+        elif isinstance(obj, str):
+            # Process string template variables
+            processed_str = obj
+            if "%TIMESTAMP%" in processed_str:
+                local_dt = datetime.now(UTC)
+                offset = time.localtime().tm_gmtoff
+                unix_timestamp = int(local_dt.timestamp() + offset)
+                processed_str = processed_str.replace("%TIMESTAMP%", str(unix_timestamp))
+            
+            # Add more template variables here as needed
+            # if "%DEVICE_NAME%" in processed_str:
+            #     processed_str = processed_str.replace("%DEVICE_NAME%", device_name)
+            
+            return processed_str
+        
+        else:
+            return obj
+    
+    def get_predefined_commands(self) -> Dict[str, str]:
+        """Get the list of predefined commands with processed templates"""
+        processed_commands = {}
+        for name, template in self.predefined_commands.items():
+            processed_commands[name] = self._process_command_template(template)
+        return processed_commands
+    
+    def reload_predefined_commands(self) -> Dict[str, any]:
+        """Reload predefined commands from file and return status"""
+        try:
+            old_count = len(self.predefined_commands)
+            self._load_predefined_commands()
+            new_count = len(self.predefined_commands)
+            
+            return {
+                "success": True,
+                "message": f"Commands reloaded successfully",
+                "old_count": old_count,
+                "new_count": new_count,
+                "commands": list(self.predefined_commands.keys())
+            }
+        except Exception as e:
+            logger.error(f"Error reloading predefined commands: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "old_count": len(self.predefined_commands),
+                "new_count": len(self.predefined_commands)
+            }
+    
+    def get_commands_file_status(self) -> Dict[str, any]:
+        """Get status information about the commands file"""
+        try:
+            pattern = "/media/*/HUBLINK/bluetooth_commands.json"
+            matching_files = glob.glob(pattern)
+            
+            if not matching_files:
+                return {
+                    "file_found": False,
+                    "file_path": None,
+                    "commands_count": 0,
+                    "message": "No bluetooth_commands.json file found in /media/*/HUBLINK/"
+                }
+            
+            file_path = matching_files[0]
+            commands_count = len(self.predefined_commands)
+            
+            # Get file modification time
+            import os
+            mod_time = os.path.getmtime(file_path)
+            mod_time_str = datetime.fromtimestamp(mod_time).strftime("%Y-%m-%d %H:%M:%S")
+            
+            return {
+                "file_found": True,
+                "file_path": file_path,
+                "commands_count": commands_count,
+                "commands_list": list(self.predefined_commands.keys()),
+                "last_modified": mod_time_str,
+                "message": f"Loaded {commands_count} commands from {file_path}"
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting commands file status: {e}")
+            return {
+                "file_found": False,
+                "file_path": None,
+                "commands_count": len(self.predefined_commands),
+                "error": str(e),
+                "message": "Error checking commands file status"
+            }
+    
+    def _add_activity(self, message: str, activity_type: str = 'info', device_address: str = None):
+        """Add activity to recent activity log for terminal display"""
+        try:
+            activity_item = {
+                "timestamp": datetime.now().isoformat(),
+                "message": message,
+                "type": activity_type,
+                "device_address": device_address
+            }
+            
+            self.recent_activity.append(activity_item)
+            
+            # Keep only last 50 items
+            if len(self.recent_activity) > 50:
+                self.recent_activity.pop(0)
+                
+        except Exception as e:
+            logger.error(f"Error adding activity: {e}")
+    
+    def get_recent_activity(self) -> List[Dict]:
+        """Get recent BLE activity for terminal display"""
+        return self.recent_activity.copy()
     
     def set_status_callback(self, callback: Callable):
         """Set callback for status updates"""
@@ -247,14 +423,66 @@ class BluetoothScanner:
             device_info['connection_status'] = 'connected'
             device_info['connected_at'] = datetime.now().isoformat()
             
-            # Try to read node information
+            # Try to read node information and set up notifications
             try:
+                # First read the current node data
                 node_data = await client.read_gatt_char(CHARACTERISTIC_UUID_NODE)
                 data_str = node_data.decode('utf-8')
                 node_info = json.loads(data_str)
                 device_info['upload_path'] = node_info.get('upload_path', 'Unknown')
                 device_info['node_data_raw'] = data_str  # Store raw data for display
                 logger.info(f"Device upload path: {device_info['upload_path']}")
+                
+                # Set up indication handlers following the sample code pattern
+                def filename_indication_handler(sender, data):
+                    try:
+                        filename_data = data.decode('utf-8').strip()
+                        logger.info(f"Filename indication received: {filename_data}")
+                        self._add_activity(f"Filename indication: {filename_data}", "info", address)
+                        # Update the stored device info with filename data
+                        if address in self.discovered_devices:
+                            if 'filename_data' not in self.discovered_devices[address]:
+                                self.discovered_devices[address]['filename_data'] = []
+                            self.discovered_devices[address]['filename_data'].append(filename_data)
+                    except Exception as e:
+                        logger.error(f"Error handling filename indication: {e}")
+                        self._add_activity(f"Error handling filename indication: {e}", "error", address)
+                
+                def filetransfer_indication_handler(sender, data):
+                    try:
+                        logger.info(f"File transfer indication received: {len(data)} bytes")
+                        
+                        # Update the stored device info with transfer data
+                        if address in self.discovered_devices:
+                            current_time = datetime.now().isoformat()
+                            if 'transfer_data' not in self.discovered_devices[address]:
+                                self.discovered_devices[address]['transfer_data'] = []
+                            
+                            if data in [b"EOF", b"NFF"]:
+                                transfer_info = f"{current_time}: Transfer ended - {data.decode()}"
+                                self.discovered_devices[address]['node_data_raw'] = transfer_info
+                                logger.info(f"Updated node_data_raw for {address}: {transfer_info}")
+                                self._add_activity(f"Transfer ended: {data.decode()}", "info", address)
+                            else:
+                                decoded_data = data.decode('utf-8', errors='ignore')
+                                transfer_info = f"{current_time}: Received {len(data)} bytes"
+                                self.discovered_devices[address]['node_data_raw'] = f"{current_time}: {decoded_data}"
+                                logger.info(f"Updated node_data_raw for {address}: {decoded_data}")
+                                self._add_activity(f"Data indication ({len(data)} bytes): {decoded_data[:50]}{'...' if len(decoded_data) > 50 else ''}", "success", address)
+                                
+                            self.discovered_devices[address]['transfer_data'].append(transfer_info)
+                        else:
+                            logger.warning(f"Device {address} not found in discovered_devices for indication update")
+                            self._add_activity(f"Device {address} not found for indication update", "warning", address)
+                    except Exception as e:
+                        logger.error(f"Error handling file transfer indication: {e}")
+                        self._add_activity(f"Error handling indication: {e}", "error", address)
+                
+                # Subscribe to indications following the sample code pattern
+                await client.start_notify(CHARACTERISTIC_UUID_FILENAME, filename_indication_handler)
+                await client.start_notify(CHARACTERISTIC_UUID_FILETRANSFER, filetransfer_indication_handler)
+                logger.info(f"Subscribed to filename and filetransfer indications for {address}")
+                
             except Exception as e:
                 logger.warning(f"Could not read node info from {address}: {e}")
                 device_info['upload_path'] = 'Unknown'
@@ -283,8 +511,16 @@ class BluetoothScanner:
             device_info = self.discovered_devices.get(address, {})
             logger.info(f"Disconnecting from device: {device_info.get('name', address)}")
             
-            # Disconnect client
+            # Stop notifications and disconnect client
             client = self.connected_devices[address]
+            try:
+                # Stop all characteristic notifications following sample code pattern
+                await client.stop_notify(CHARACTERISTIC_UUID_FILENAME)
+                await client.stop_notify(CHARACTERISTIC_UUID_FILETRANSFER)
+                logger.info(f"Stopped filename and filetransfer notifications for {address}")
+            except Exception as e:
+                logger.warning(f"Error stopping notifications for {address}: {e}")
+            
             await client.disconnect()
             
             # Remove from connected devices
