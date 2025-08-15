@@ -37,6 +37,43 @@ class BluetoothScanner:
         
         logger.info("BluetoothScanner initialized")
     
+    def _disconnection_callback(self, client: BleakClient):
+        """Callback for when a device disconnects unexpectedly"""
+        try:
+            # Find which device this client belongs to
+            disconnected_address = None
+            for address, stored_client in self.connected_devices.items():
+                if stored_client == client:
+                    disconnected_address = address
+                    break
+            
+            if disconnected_address:
+                logger.warning(f"Device {disconnected_address} disconnected unexpectedly")
+                
+                # Update device info to reflect disconnection
+                if disconnected_address in self.discovered_devices:
+                    self.discovered_devices[disconnected_address]['connection_status'] = 'discovered'
+                    self.discovered_devices[disconnected_address]['disconnected_at'] = datetime.now().isoformat()
+                    self.discovered_devices[disconnected_address]['disconnect_reason'] = 'unexpected'
+                
+                # Remove from connected devices
+                if disconnected_address in self.connected_devices:
+                    del self.connected_devices[disconnected_address]
+                
+                # Notify status callback if set
+                if self._status_callback:
+                    self._status_callback('device_disconnected', {
+                        'address': disconnected_address,
+                        'reason': 'unexpected'
+                    })
+                
+                logger.info(f"Cleaned up state for disconnected device {disconnected_address}")
+            else:
+                logger.warning("Received disconnection callback for unknown device")
+                
+        except Exception as e:
+            logger.error(f"Error in disconnection callback: {e}")
+    
     def set_status_callback(self, callback: Callable):
         """Set callback for status updates"""
         self._status_callback = callback
@@ -46,40 +83,7 @@ class BluetoothScanner:
         self.device_name_filter = filter_text.strip()
         logger.info(f"Device name filter set to: '{self.device_name_filter}'")
     
-    async def _ensure_services_discovered(self, client: BleakClient) -> None:
-        """Ensure GATT services are discovered before any read/write.
-        Uses get_services() while suppressing deprecation warnings and verifies
-        target characteristics are resolvable.
-        """
-        try:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", category=FutureWarning)
-                await client.get_services()
-        except Exception as e:
-            logger.debug(f"Initial service discovery attempt failed: {e}")
 
-        # Give BlueZ a brief moment to populate services
-        await asyncio.sleep(0.1)
-
-        services = getattr(client, "services", None)
-        char_node = None
-        char_gateway = None
-        try:
-            if services is not None and hasattr(services, "get_characteristic"):
-                char_node = services.get_characteristic(CHARACTERISTIC_UUID_NODE)
-                char_gateway = services.get_characteristic(CHARACTERISTIC_UUID_GATEWAY)
-        except Exception as e:
-            logger.debug(f"Characteristic lookup error: {e}")
-
-        if not char_node or not char_gateway:
-            # Retry once more after a short delay
-            await asyncio.sleep(0.3)
-            try:
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore", category=FutureWarning)
-                    await client.get_services()
-            except Exception as e:
-                logger.warning(f"Service discovery retry failed: {e}")
 
     def _detection_callback(self, device: BLEDevice, advertisement_data: AdvertisementData):
         """Callback for device detection during scanning"""
@@ -137,13 +141,13 @@ class BluetoothScanner:
             self.is_scanning = True
             self.scan_start_time = datetime.now()
             
-            # In simulation mode, don't clear devices and just return success
+            # Clear previous discoveries (always, regardless of simulation mode)
+            self.discovered_devices.clear()
+            
+            # In simulation mode, skip actual Bluetooth scan
             if SIMULATION_MODE:
                 logger.info("Simulation mode: Skipping actual Bluetooth scan")
                 return {"success": True, "message": "Scan started (simulation mode)"}
-            
-            # Clear previous discoveries
-            self.discovered_devices.clear()
             
             # Create new scanner instance for this scan (like reference code)
             self.scanner = BleakScanner(detection_callback=self._detection_callback)
@@ -207,6 +211,11 @@ class BluetoothScanner:
             if address in self.connected_devices:
                 return {"success": False, "error": "Already connected to this device"}
             
+            # Stop scanning immediately when connecting
+            if self.is_scanning:
+                logger.info("Stopping scan before connecting to device")
+                await self.stop_scan()
+            
             # Enforce single connection - disconnect any existing connections
             if self.connected_devices:
                 logger.info("Disconnecting existing device to enforce single connection")
@@ -215,13 +224,24 @@ class BluetoothScanner:
             device_info = self.discovered_devices[address]
             logger.info(f"Connecting to device: {device_info['name']} ({address})")
             
-            # Create BleakClient and connect
+            # Create BleakClient and connect - use the same pattern as your working example
             client = BleakClient(address, timeout=5.0)
+            
+            # Set disconnection callback before connecting
+            client.set_disconnected_callback(self._disconnection_callback)
+            
             await client.connect()
 
-            # Small stabilization and explicit service discovery
-            await asyncio.sleep(0.2)
-            await self._ensure_services_discovered(client)
+            # Wait for service discovery like your working example
+            if not client.services:
+                logger.warning("No services found")
+                await client.disconnect()
+                return {"success": False, "error": "No services found"}
+            
+            logger.debug("Services discovered successfully")
+            
+            # Small stabilization delay like your working example
+            await asyncio.sleep(0.1)
             
             # Update device info with connection status
             device_info['connection_status'] = 'connected'
@@ -230,12 +250,15 @@ class BluetoothScanner:
             # Try to read node information
             try:
                 node_data = await client.read_gatt_char(CHARACTERISTIC_UUID_NODE)
-                node_info = json.loads(node_data.decode('utf-8'))
+                data_str = node_data.decode('utf-8')
+                node_info = json.loads(data_str)
                 device_info['upload_path'] = node_info.get('upload_path', 'Unknown')
+                device_info['node_data_raw'] = data_str  # Store raw data for display
                 logger.info(f"Device upload path: {device_info['upload_path']}")
             except Exception as e:
                 logger.warning(f"Could not read node info from {address}: {e}")
                 device_info['upload_path'] = 'Unknown'
+                device_info['node_data_raw'] = None
             
             # Store connected client
             self.connected_devices[address] = client
@@ -271,6 +294,7 @@ class BluetoothScanner:
             if address in self.discovered_devices:
                 self.discovered_devices[address]['connection_status'] = 'discovered'
                 self.discovered_devices[address]['disconnected_at'] = datetime.now().isoformat()
+                self.discovered_devices[address]['disconnect_reason'] = 'manual'
             
             logger.info(f"Successfully disconnected from {device_info.get('name', address)}")
             return {"success": True, "message": "Disconnected successfully"}
@@ -289,10 +313,24 @@ class BluetoothScanner:
             if not client:
                 return {"success": False, "error": "No BLE client available"}
             
+            # Verify client is still connected and services are available like your working example
+            if not client.is_connected:
+                # Clean up disconnected device from our state
+                if address in self.connected_devices:
+                    del self.connected_devices[address]
+                if address in self.discovered_devices:
+                    self.discovered_devices[address]['connection_status'] = 'discovered'
+                    self.discovered_devices[address]['disconnected_at'] = datetime.now().isoformat()
+                    self.discovered_devices[address]['disconnect_reason'] = 'timeout'
+                logger.warning(f"Device {address} is no longer connected during read operation")
+                return {"success": False, "error": "Device disconnected"}
+            
+            if not client.services:
+                return {"success": False, "error": "No services available"}
+            
             logger.info(f"Reading node characteristic from {address}")
             
-            # Ensure services and read the node characteristic
-            await self._ensure_services_discovered(client)
+            # Read the node characteristic directly like your working example
             node_data = await client.read_gatt_char(CHARACTERISTIC_UUID_NODE)
             data_str = node_data.decode('utf-8')
             
@@ -316,10 +354,24 @@ class BluetoothScanner:
             if not client:
                 return {"success": False, "error": "No BLE client available"}
             
+            # Verify client is still connected and services are available like your working example
+            if not client.is_connected:
+                # Clean up disconnected device from our state
+                if address in self.connected_devices:
+                    del self.connected_devices[address]
+                if address in self.discovered_devices:
+                    self.discovered_devices[address]['connection_status'] = 'discovered'
+                    self.discovered_devices[address]['disconnected_at'] = datetime.now().isoformat()
+                    self.discovered_devices[address]['disconnect_reason'] = 'timeout'
+                logger.warning(f"Device {address} is no longer connected during write operation")
+                return {"success": False, "error": "Device disconnected"}
+            
+            if not client.services:
+                return {"success": False, "error": "No services available"}
+            
             logger.info(f"Writing gateway command to {address}: {command}")
             
-            # Ensure services and write the command to the gateway characteristic
-            await self._ensure_services_discovered(client)
+            # Write to the gateway characteristic directly like your working example
             command_bytes = command.encode('utf-8')
             await client.write_gatt_char(CHARACTERISTIC_UUID_GATEWAY, command_bytes, response=True)
             

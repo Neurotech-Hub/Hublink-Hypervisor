@@ -140,11 +140,7 @@ def connect_device(address):
     """Connect to a specific device"""
     try:
         logger.info(f"Connect to device requested: {address}")
-        # Stop scanning before attempting connection to avoid conflicts
-        try:
-            run_async(scanner_instance.stop_scan())
-        except Exception:
-            pass
+        # The connect_to_device method will handle stopping the scan
         result = run_async(scanner_instance.connect_to_device(address))
         return jsonify(result)
     except Exception as e:

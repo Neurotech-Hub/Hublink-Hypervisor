@@ -1032,14 +1032,13 @@ body {
     font-size: 1.125rem;
     font-weight: 600;
     min-width: 200px;
-    border-radius: 25px !important;
-    /* ensure fully rounded for large buttons */
+    border-radius: 8px !important;
+    /* larger but consistent rounding for large buttons */
 }
 
-/* Override last-child rule for large buttons to ensure they stay fully rounded */
-.btn-large:last-child {
-    border-top-right-radius: 25px !important;
-    border-bottom-right-radius: 25px !important;
+/* Individual buttons (not in groups) should have standard rounded corners */
+.btn-rounded {
+    border-radius: 6px !important;
 }
 
 .scanner-status {
@@ -1365,6 +1364,12 @@ body {
 
 .device-upload-path {
     color: #007bff;
+}
+
+.device-disconnect-info {
+    color: #ffc107;
+    font-size: 0.8rem;
+    font-style: italic;
 }
 
 .device-actions {

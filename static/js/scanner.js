@@ -7,6 +7,7 @@ class HublinkScanner {
     constructor() {
         this.elements = {};
         this.isInitialized = false;
+        this.connectionMonitorInterval = null;
         this.init();
     }
 
@@ -60,8 +61,34 @@ class HublinkScanner {
     async loadInitialState() {
         try {
             await this.refreshDevices();
+            this.startConnectionMonitoring();
         } catch (error) {
             console.error('Error loading initial state:', error);
+        }
+    }
+
+    startConnectionMonitoring() {
+        // Monitor connection status every 5 seconds
+        if (this.connectionMonitorInterval) {
+            clearInterval(this.connectionMonitorInterval);
+        }
+
+        this.connectionMonitorInterval = setInterval(async () => {
+            try {
+                await this.refreshDevices();
+            } catch (error) {
+                console.error('Error during connection monitoring:', error);
+            }
+        }, 5000);
+
+        console.log('Connection monitoring started');
+    }
+
+    stopConnectionMonitoring() {
+        if (this.connectionMonitorInterval) {
+            clearInterval(this.connectionMonitorInterval);
+            this.connectionMonitorInterval = null;
+            console.log('Connection monitoring stopped');
         }
     }
 
@@ -170,15 +197,13 @@ class HublinkScanner {
 
     async connectToDevice(address) {
         try {
-            // Best-effort stop scanner before connecting (idempotent on backend)
-            try { await fetch('/api/scanner/stop', { method: 'POST' }); } catch (_) { }
-
-            // Use real endpoint
+            // Backend handles stopping scan - no need to do it here
             const response = await fetch(`/api/scanner/connect/${address}`, { method: 'POST' });
             const result = await response.json();
 
             if (result.success) {
                 this.showNotification(`Connected to ${result.device.name}`, 'success');
+                // Backend already read node data during connection - just refresh UI
                 this.refreshDevices();
             } else {
                 this.showNotification(`Failed to connect: ${result.error}`, 'error');
@@ -200,6 +225,8 @@ class HublinkScanner {
 
             if (result.success) {
                 this.showNotification('Device disconnected successfully', 'success');
+                // Clear any disconnection notification tracking for this device
+                localStorage.removeItem(`disconnect_notified_${address}`);
                 this.refreshDevices();
             } else {
                 this.showNotification(`Failed to disconnect: ${result.error}`, 'error');
@@ -258,13 +285,32 @@ class HublinkScanner {
             return;
         }
 
+        // Check for any devices that were previously connected but are now disconnected
+        this.checkForDisconnections(devices);
+
         const deviceItems = devices.map(device => this.createDeviceItem(device)).join('');
         this.elements.deviceListContent.innerHTML = deviceItems;
 
-        // Load node data for connected devices
+        // Node data is read automatically during connection in backend
+        // Only load node data if user explicitly requests it
+    }
+
+    checkForDisconnections(devices) {
+        // Check if any previously connected devices are now showing as disconnected
         devices.forEach(device => {
-            if (device.connection_status === 'connected') {
-                this.loadNodeData(device.address);
+            if (device.connection_status === 'discovered' &&
+                device.disconnect_reason &&
+                device.disconnect_reason !== 'manual') {
+
+                // Only show notification if we haven't already notified about this disconnection
+                const lastNotified = localStorage.getItem(`disconnect_notified_${device.address}`);
+                const disconnectTime = device.disconnected_at;
+
+                if (lastNotified !== disconnectTime) {
+                    const reasonText = device.disconnect_reason === 'unexpected' ? 'timed out' : 'lost connection';
+                    this.showNotification(`Device ${device.name} ${reasonText}`, 'warning');
+                    localStorage.setItem(`disconnect_notified_${device.address}`, disconnectTime);
+                }
             }
         });
     }
@@ -274,6 +320,15 @@ class HublinkScanner {
         const rssiText = device.rssi ? `${device.rssi} dBm` : 'Unknown';
         const hasAnyConnection = this.hasAnyConnectedDevice();
 
+        // Show disconnection reason if available
+        let disconnectionInfo = '';
+        if (device.disconnect_reason && device.disconnected_at) {
+            const disconnectTime = new Date(device.disconnected_at).toLocaleTimeString();
+            const reasonText = device.disconnect_reason === 'unexpected' ? 'timed out' :
+                device.disconnect_reason === 'timeout' ? 'lost connection' : 'disconnected';
+            disconnectionInfo = `<span class="device-disconnect-info">Last ${reasonText} at ${disconnectTime}</span>`;
+        }
+
         return `
             <div class="device-item ${isConnected ? 'connected' : ''}" data-address="${device.address}">
                 <div class="device-main-content">
@@ -282,14 +337,15 @@ class HublinkScanner {
                         <div class="device-details">
                             <span class="device-address">${device.address}</span>
                             <span>RSSI: ${rssiText}</span>
+                            ${disconnectionInfo}
                         </div>
                     </div>
                     <div class="device-actions">
                         ${isConnected ?
-                `<button class="btn btn-sm btn-warning" onclick="window.hublinkScanner.disconnectFromDevice('${device.address}')">
+                `<button class="btn btn-sm btn-warning btn-rounded" onclick="window.hublinkScanner.disconnectFromDevice('${device.address}')">
                                 Disconnect
                             </button>` :
-                `<button class="btn btn-sm btn-primary" onclick="window.hublinkScanner.connectToDevice('${device.address}')" ${hasAnyConnection ? 'disabled' : ''}>
+                `<button class="btn btn-sm btn-primary btn-rounded" onclick="window.hublinkScanner.connectToDevice('${device.address}')" ${hasAnyConnection ? 'disabled' : ''}>
                                 Connect
                             </button>`
             }
@@ -380,12 +436,28 @@ class HublinkScanner {
         const connectedAt = device.connected_at ? new Date(device.connected_at).toLocaleString() : 'Unknown';
         const uploadPath = device.upload_path || 'Unknown';
 
+        // Display node data that was already read during connection
+        let nodeDataContent;
+        if (device.node_data_raw) {
+            nodeDataContent = `
+                <div class="node-data-raw">
+                    <pre>${this.escapeHtml(device.node_data_raw)}</pre>
+                </div>
+            `;
+        } else {
+            nodeDataContent = `
+                <div class="node-data-error">
+                    <p>Node data not available</p>
+                </div>
+            `;
+        }
+
         return `
             <div class="device-expanded-content">
                 <div class="device-node-data">
                     <h4>Node Characteristic Data</h4>
                     <div class="node-data-content" id="node-data-${device.address}">
-                        <div class="loading-indicator">Loading node data...</div>
+                        ${nodeDataContent}
                     </div>
                 </div>
                 <div class="device-gateway-command">
@@ -398,7 +470,7 @@ class HublinkScanner {
                             rows="3"
                         ></textarea>
                         <button 
-                            class="btn btn-primary" 
+                            class="btn btn-primary btn-rounded" 
                             onclick="window.hublinkScanner.writeGatewayCommand('${device.address}')"
                         >
                             Write Command
