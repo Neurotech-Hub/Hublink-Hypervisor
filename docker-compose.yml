@@ -14,10 +14,8 @@ services:
         max-file: "3"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - /opt/hublink:/opt/hublink:ro
       - /dev:/dev:ro
       - /run/udev:/run/udev:ro
-      - /media:/media:rshared
       - /var/run/dbus:/var/run/dbus
       - /var/run/bluetooth:/var/run/bluetooth
     environment:
