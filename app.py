@@ -272,6 +272,12 @@ class AutoFixManager:
         if not auto_fix_enabled:
             return False
         
+        # Don't auto-fix if container is intentionally stopped
+        if container_state and container_state.get('state') == 'stopped':
+            logger.debug("Container is intentionally stopped - not auto-fixing")
+            issue_start_time = None
+            return False
+        
         # Check if container is unhealthy OR has application-level errors
         is_unhealthy = False
         has_application_errors = container_errors and len(container_errors) > 0
@@ -685,6 +691,8 @@ class HublinkManager:
                         and 'hypervisor' not in c['name'].lower()
                         and 'watchtower' not in c['name'].lower()
                         and c['status'] != 'exited'
+                        and 'Exited' not in c['status']
+                        and 'Created' not in c['status']
                     ]
                     
                     logger.debug(f"Found {len(hublink_containers)} Hublink containers using Docker SDK")
@@ -723,7 +731,9 @@ class HublinkManager:
                 if 'hublink-gateway' in c['name'].lower() 
                 and 'hypervisor' not in c['name'].lower()
                 and 'watchtower' not in c['name'].lower()
+                and c['status'] != 'exited'
                 and 'Exited' not in c['status']
+                and 'Created' not in c['status']
             ]
             
             logger.debug(f"Found {len(hublink_containers)} Hublink containers using shell commands")
@@ -737,9 +747,19 @@ class HublinkManager:
             logger.error(f"Error getting container status: {e}")
             return {"error": str(e)}
     
-    def get_container_state(self):
+    def get_container_state(self, force_refresh=False):
         """Get simplified container state for UI"""
         try:
+            # Clear cache if force_refresh is requested
+            if force_refresh:
+                logger.debug("Force refreshing container state")
+                # Clear any cached container info
+                if hasattr(self, 'docker_client') and self.docker_client:
+                    try:
+                        self.docker_client.containers.list()  # Force refresh
+                    except Exception:
+                        pass
+            
             status = self.get_container_status()
             if "error" in status:
                 return status
@@ -887,22 +907,23 @@ def index():
 def status():
     """Get comprehensive system status"""
     try:
-        # Get container state
-        container_state = hublink_manager.get_container_state()
-        
-        # Check internet connectivity
+        # Check internet connectivity first
         app_internet = internet_checker.check_app_internet()
+        
+        # Get container state with improved detection
+        container_state = hublink_manager.get_container_state()
         
         # Initialize error tracking
         errors = {}
         timestamps = {}
         
-        # Check Hublink API status if container is running (single call to get all Hublink info)
+        # Check Hublink API status and correlate with container state
         hublink_status = None
         secret_url = None
         gateway_name = None
         hublink_internet = False
         
+        # If container state shows running, verify it's actually accessible
         if container_state.get("state") == "running":
             try:
                 # Use cached Hublink status to prevent duplicate requests
@@ -918,11 +939,27 @@ def status():
                         errors.update(hublink_status.get("errors", {}))
                         timestamps.update(hublink_status.get("timestamps", {}))
                 else:
-                    errors["hublink_api"] = f"Failed to connect to Hublink API"
-                    timestamps["hublink_api"] = time.time()
+                    # API connection failed - this likely means container is actually down
+                    # despite what container_state says. Let's re-check container state.
+                    logger.warning("Hublink API connection failed, re-checking container state")
+                    container_state = hublink_manager.get_container_state(force_refresh=True)
+                    
+                    if container_state.get("state") != "running":
+                        logger.info("Container state corrected: container is actually stopped")
+                    else:
+                        # Container shows running but API is unreachable - this is a real error
+                        errors["hublink_api"] = f"Container appears running but API is unreachable"
+                        timestamps["hublink_api"] = time.time()
             except Exception as e:
-                errors["hublink_api"] = f"Failed to connect to Hublink API: {str(e)}"
-                timestamps["hublink_api"] = time.time()
+                # API connection failed - re-check container state
+                logger.warning(f"Hublink API connection failed: {e}, re-checking container state")
+                container_state = hublink_manager.get_container_state(force_refresh=True)
+                
+                if container_state.get("state") != "running":
+                    logger.info("Container state corrected: container is actually stopped")
+                else:
+                    errors["hublink_api"] = f"Failed to connect to Hublink API: {str(e)}"
+                    timestamps["hublink_api"] = time.time()
         
         # Determine overall status
         
@@ -940,8 +977,13 @@ def status():
             errors["hublink_internet"] = "Hublink container has no internet connectivity"
             timestamps["hublink_internet"] = time.time()
         
-        # Check for auto-fix opportunities
-        auto_fix_applied = auto_fix_manager.check_and_fix_issues(container_state, errors, app_internet, hublink_internet)
+        # Check for auto-fix opportunities (only if container is supposed to be running)
+        auto_fix_applied = False
+        if container_state.get("state") in ["running", "not_found"]:
+            # Only auto-fix if container should be running but has issues
+            auto_fix_applied = auto_fix_manager.check_and_fix_issues(container_state, errors, app_internet, hublink_internet)
+        else:
+            logger.debug("Container is stopped - skipping auto-fix (user may have intentionally stopped it)")
         
         # Get scanner status if available
         scanner_status = None

@@ -168,7 +168,7 @@ The Bluetooth scanner supports predefined commands loaded from a configuration f
     "sendFiles": true
   },
   "timestamp": {
-    "timestamp": "%TIMESTAMP%"
+    "timestamp": -1
   },
   "getStatus": {
     "getStatus": true
@@ -177,7 +177,7 @@ The Bluetooth scanner supports predefined commands loaded from a configuration f
     "restart": "sensor"
   },
   "syncTime": {
-    "timestamp": "%TIMESTAMP%",
+    "timestamp": -1,
     "sendFilenames": true,
     "watchdogTimeoutMs": 10000
   }
@@ -185,11 +185,11 @@ The Bluetooth scanner supports predefined commands loaded from a configuration f
 ```
 
 **Template Variables**:
-- `%TIMESTAMP%`: Replaced with current local Unix timestamp
+- `-1`: Special numeric placeholder replaced with current local Unix timestamp (integer)
 
 **Format Features**:
 - ✅ **Clean JSON objects** - No escaping needed, write native JSON
-- ✅ **Template variables** - Use `%TIMESTAMP%` in any string value
+- ✅ **Template variables** - Use `-1` for timestamp placeholders
 - ✅ **Nested structures** - Support for complex command objects
 - ✅ **IDE friendly** - Full syntax highlighting and validation
 - ✅ **Readable & maintainable** - Clear structure for complex commands
@@ -197,7 +197,7 @@ The Bluetooth scanner supports predefined commands loaded from a configuration f
 **Features**:
 - **Automatic Detection**: File is loaded at application startup
 - **Quick Commands**: Commands appear as buttons in a 4-column grid when connected to a device
-- **Template Processing**: Variables like `%TIMESTAMP%` are automatically replaced
+- **Template Processing**: Variables like `-1` are automatically replaced with current timestamp
 - **Responsive Design**: Grid adapts to 2 columns on tablets, 1 column on phones
 - **Hover Tooltips**: Full command shown on button hover
 

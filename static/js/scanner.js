@@ -3,6 +3,7 @@
  * Dedicated functionality for the scanner page
  */
 
+// Cache bust: v1.1 - Fixed updateConnectedDeviceData error
 class HublinkScanner {
     constructor() {
         this.elements = {};
@@ -143,8 +144,8 @@ class HublinkScanner {
 
                 this.showNotification(message, 'success');
 
-                // Refresh any connected device UI to show new commands
-                await this.refreshDevices();
+                // Update command buttons for connected devices without rebuilding entire UI
+                this.updateCommandButtonsForConnectedDevices();
             } else {
                 this.showNotification(`Failed to refresh commands: ${result.error}`, 'error');
             }
@@ -202,21 +203,24 @@ class HublinkScanner {
     }
 
     startConnectionMonitoring() {
-        // Monitor connection status more frequently (every 1 second) for real-time indication updates
+        // Refresh BLE activity and check for disconnections
         if (this.connectionMonitorInterval) {
             clearInterval(this.connectionMonitorInterval);
         }
 
         this.connectionMonitorInterval = setInterval(async () => {
             try {
+                // Refresh BLE activity for real-time indication updates
+                await this.refreshBleActivity();
+
+                // Also refresh device list to detect disconnections
                 await this.refreshDevices();
-                await this.refreshBleActivity(); // Also refresh BLE activity
             } catch (error) {
                 console.error('Error during connection monitoring:', error);
             }
-        }, 1000); // 1 second for real-time indication updates
+        }, 2000); // 2 seconds for both BLE activity and disconnection detection
 
-        console.log('Connection monitoring started (1 second intervals for real-time updates)');
+        console.log('Connection monitoring started (BLE activity + disconnection detection)');
     }
 
     stopConnectionMonitoring() {
@@ -355,17 +359,36 @@ class HublinkScanner {
             // Best-effort stop scanner first
             try { await fetch('/api/scanner/stop', { method: 'POST' }); } catch (_) { }
 
-            // Use real endpoint
+            // Attempt disconnect
             const response = await fetch(`/api/scanner/disconnect/${address}`, { method: 'POST' });
-            const result = await response.json();
+            let result = { success: false };
+            try { result = await response.json(); } catch (_) { /* ignore parse issues */ }
 
-            if (result.success) {
-                this.showNotification('Device disconnected successfully', 'success');
-                // Clear any disconnection notification tracking for this device
-                localStorage.removeItem(`disconnect_notified_${address}`);
-                this.refreshDevices();
-            } else {
-                this.showNotification(`Failed to disconnect: ${result.error}`, 'error');
+            // Always refresh device list after attempting disconnect
+            await this.refreshDevices();
+
+            // Validate current state from backend
+            try {
+                const devicesResp = await fetch('/api/scanner/devices');
+                const devicesData = await devicesResp.json();
+                const device = devicesData.success ? (devicesData.devices || []).find(d => d.address === address) : null;
+                const isDisconnected = !device || device.connection_status !== 'connected';
+                if (isDisconnected) {
+                    this.showNotification('Device disconnected successfully', 'success');
+                    localStorage.removeItem(`disconnect_notified_${address}`);
+                } else {
+                    const reason = result && result.error ? `: ${result.error}` : '';
+                    this.showNotification(`Failed to disconnect${reason}`, 'error');
+                }
+            } catch (e) {
+                // Fallback: if we cannot validate, rely on server response
+                if (result.success) {
+                    this.showNotification('Device disconnected successfully', 'success');
+                    localStorage.removeItem(`disconnect_notified_${address}`);
+                } else {
+                    const reason = result && result.error ? `: ${result.error}` : '';
+                    this.showNotification(`Failed to disconnect${reason}`, 'error');
+                }
             }
         } catch (error) {
             console.error('Error disconnecting from device:', error);
@@ -421,11 +444,17 @@ class HublinkScanner {
             return;
         }
 
+        // Preserve user input before updating
+        this.preserveUserInputs();
+
         // Check for any devices that were previously connected but are now disconnected
         this.checkForDisconnections(devices);
 
         const deviceItems = devices.map(device => this.createDeviceItem(device)).join('');
         this.elements.deviceListContent.innerHTML = deviceItems;
+
+        // Restore user input after updating
+        this.restoreUserInputs();
 
         // Node data is read automatically during connection in backend
         // Only load node data if user explicitly requests it
@@ -584,11 +613,7 @@ class HublinkScanner {
             if (result.success) {
                 this.showNotification('Command sent successfully', 'success');
                 this.logBleActivity(`Command sent to ${address}: ${command}`, 'success');
-
-                // Immediately refresh devices to show any indication responses
-                setTimeout(async () => {
-                    await this.refreshDevices();
-                }, 500); // Small delay to allow device to respond
+                // BLE activity will show the response automatically via the terminal
             } else {
                 this.showNotification(`Failed to send command: ${result.error}`, 'error');
                 this.logBleActivity(`Command failed: ${result.error}`, 'error');
@@ -766,6 +791,79 @@ class HublinkScanner {
         this.addTerminalLine(activity, type);
         console.log(`[BLE] ${activity}`);
     }
+
+    updateCommandButtonsForConnectedDevices() {
+        // Update command buttons for all connected devices without rebuilding entire UI
+        const connectedDevices = document.querySelectorAll('.device-item.connected');
+
+        connectedDevices.forEach(deviceItem => {
+            const deviceAddress = deviceItem.getAttribute('data-address');
+            const commandSection = deviceItem.querySelector('.device-predefined-commands');
+
+            if (commandSection && deviceAddress) {
+                // Generate new command buttons using updated predefinedCommands
+                let commandButtonsContent = '';
+                if (Object.keys(this.predefinedCommands).length > 0) {
+                    const commandButtons = Object.entries(this.predefinedCommands).map(([name, command]) => {
+                        return `
+                            <button 
+                                class="btn btn-secondary btn-rounded command-grid-btn" 
+                                data-device-address="${deviceAddress}"
+                                data-command-name="${this.escapeHtml(name)}"
+                                onclick="window.hublinkScanner.sendPredefinedCommandByName('${deviceAddress}', '${this.escapeHtml(name)}')"
+                                title="${this.escapeHtml(command)}"
+                            >
+                                ${this.escapeHtml(name)}
+                            </button>
+                        `;
+                    }).join('');
+
+                    commandButtonsContent = `
+                        <h4>Quick Commands</h4>
+                        <div class="command-grid">
+                            ${commandButtons}
+                        </div>
+                    `;
+                } else {
+                    commandButtonsContent = `
+                        <h4>Quick Commands</h4>
+                        <div class="command-grid">
+                            <p style="grid-column: 1 / -1; text-align: center; color: #6c757d; font-style: italic;">
+                                No commands available
+                            </p>
+                        </div>
+                    `;
+                }
+
+                commandSection.innerHTML = commandButtonsContent;
+            }
+        });
+    }
+
+    preserveUserInputs() {
+        // Save current user input values before refreshing
+        this.savedInputs = {};
+        const commandInputs = document.querySelectorAll('.command-input');
+
+        commandInputs.forEach(input => {
+            const deviceAddress = input.id.replace('command-input-', '');
+            this.savedInputs[deviceAddress] = input.value;
+        });
+    }
+
+    restoreUserInputs() {
+        // Restore user input values after refreshing
+        if (!this.savedInputs) return;
+
+        Object.entries(this.savedInputs).forEach(([deviceAddress, value]) => {
+            const input = document.getElementById(`command-input-${deviceAddress}`);
+            if (input && value) {
+                input.value = value;
+            }
+        });
+    }
+
+
 
     async refreshBleActivity() {
         try {

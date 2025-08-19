@@ -60,9 +60,12 @@ class BluetoothScanner:
                 
                 # Update device info to reflect disconnection
                 if disconnected_address in self.discovered_devices:
-                    self.discovered_devices[disconnected_address]['connection_status'] = 'discovered'
-                    self.discovered_devices[disconnected_address]['disconnected_at'] = datetime.now().isoformat()
-                    self.discovered_devices[disconnected_address]['disconnect_reason'] = 'unexpected'
+                    device_info = self.discovered_devices[disconnected_address]
+                    device_info['connection_status'] = 'discovered'
+                    device_info['disconnected_at'] = datetime.now().isoformat()
+                    # Do not override a manual disconnect reason if already set
+                    if device_info.get('disconnect_reason') != 'manual':
+                        device_info['disconnect_reason'] = 'unexpected'
                 
                 # Remove from connected devices
                 if disconnected_address in self.connected_devices:
@@ -139,19 +142,18 @@ class BluetoothScanner:
             return [self._process_object_templates(item) for item in obj]
         
         elif isinstance(obj, str):
-            # Process string template variables
-            processed_str = obj
-            if "%TIMESTAMP%" in processed_str:
+            # No string template processing - only numeric placeholders
+            return obj
+        
+        elif isinstance(obj, (int, float)):
+            # Handle numeric placeholders for timestamps
+            if obj == -1:  # Special placeholder for timestamp
                 local_dt = datetime.now(UTC)
                 offset = time.localtime().tm_gmtoff
                 unix_timestamp = int(local_dt.timestamp() + offset)
-                processed_str = processed_str.replace("%TIMESTAMP%", str(unix_timestamp))
+                return unix_timestamp
             
-            # Add more template variables here as needed
-            # if "%DEVICE_NAME%" in processed_str:
-            #     processed_str = processed_str.replace("%DEVICE_NAME%", device_name)
-            
-            return processed_str
+            return obj
         
         else:
             return obj
@@ -505,12 +507,27 @@ class BluetoothScanner:
     async def disconnect_from_device(self, address: str) -> Dict:
         """Disconnect from a specific device"""
         try:
+            # Idempotent: if already not connected, normalize state and return success
             if address not in self.connected_devices:
-                return {"success": False, "error": "Not connected to this device"}
+                if address in self.discovered_devices:
+                    device_info = self.discovered_devices[address]
+                    device_info['connection_status'] = 'discovered'
+                    # Only set manual if no reason exists yet
+                    if not device_info.get('disconnect_reason'):
+                        device_info['disconnect_reason'] = 'manual'
+                    if not device_info.get('disconnected_at'):
+                        device_info['disconnected_at'] = datetime.now().isoformat()
+                return {"success": True, "message": "Already disconnected"}
             
             device_info = self.discovered_devices.get(address, {})
             logger.info(f"Disconnecting from device: {device_info.get('name', address)}")
             
+            # Mark as manual disconnect BEFORE initiating disconnect to avoid callback race
+            if address in self.discovered_devices:
+                device_info = self.discovered_devices[address]
+                device_info['disconnect_reason'] = 'manual'
+                device_info['disconnected_at'] = datetime.now().isoformat()
+
             # Stop notifications and disconnect client
             client = self.connected_devices[address]
             try:
@@ -528,9 +545,9 @@ class BluetoothScanner:
             
             # Update device info
             if address in self.discovered_devices:
-                self.discovered_devices[address]['connection_status'] = 'discovered'
-                self.discovered_devices[address]['disconnected_at'] = datetime.now().isoformat()
-                self.discovered_devices[address]['disconnect_reason'] = 'manual'
+                device_info = self.discovered_devices[address]
+                device_info['connection_status'] = 'discovered'
+                # disconnected_at and reason already set above
             
             logger.info(f"Successfully disconnected from {device_info.get('name', address)}")
             return {"success": True, "message": "Disconnected successfully"}
@@ -555,9 +572,12 @@ class BluetoothScanner:
                 if address in self.connected_devices:
                     del self.connected_devices[address]
                 if address in self.discovered_devices:
-                    self.discovered_devices[address]['connection_status'] = 'discovered'
-                    self.discovered_devices[address]['disconnected_at'] = datetime.now().isoformat()
-                    self.discovered_devices[address]['disconnect_reason'] = 'timeout'
+                    device_info = self.discovered_devices[address]
+                    device_info['connection_status'] = 'discovered'
+                    device_info['disconnected_at'] = datetime.now().isoformat()
+                    # Don't overwrite manual disconnection reason
+                    if device_info.get('disconnect_reason') != 'manual':
+                        device_info['disconnect_reason'] = 'timeout'
                 logger.warning(f"Device {address} is no longer connected during read operation")
                 return {"success": False, "error": "Device disconnected"}
             
@@ -596,9 +616,12 @@ class BluetoothScanner:
                 if address in self.connected_devices:
                     del self.connected_devices[address]
                 if address in self.discovered_devices:
-                    self.discovered_devices[address]['connection_status'] = 'discovered'
-                    self.discovered_devices[address]['disconnected_at'] = datetime.now().isoformat()
-                    self.discovered_devices[address]['disconnect_reason'] = 'timeout'
+                    device_info = self.discovered_devices[address]
+                    device_info['connection_status'] = 'discovered'
+                    device_info['disconnected_at'] = datetime.now().isoformat()
+                    # Don't overwrite manual disconnection reason
+                    if device_info.get('disconnect_reason') != 'manual':
+                        device_info['disconnect_reason'] = 'timeout'
                 logger.warning(f"Device {address} is no longer connected during write operation")
                 return {"success": False, "error": "Device disconnected"}
             
